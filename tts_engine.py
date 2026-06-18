@@ -28,6 +28,10 @@ def load_model():
     """Load the Chatterbox TTS model on CPU."""
     return ChatterboxTTS.from_pretrained(device="cpu")
 
+def generate_speech(model, text, audio_prompt_path=None):
+    """Generate speech for text, with optional voice cloning via audio_prompt_path."""
+    return model.generate(text, audio_prompt_path=audio_prompt_path)
+
 
 if __name__ == "__main__":
     print("Loading Chatterbox TTS model on CPU...")
