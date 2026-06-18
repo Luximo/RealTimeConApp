@@ -28,9 +28,22 @@ def load_model():
     """Load the Chatterbox TTS model on CPU."""
     return ChatterboxTTS.from_pretrained(device="cpu")
 
-def generate_speech(model, text, audio_prompt_path=None):
-    """Generate speech for text, with optional voice cloning via audio_prompt_path."""
-    return model.generate(text, audio_prompt_path=audio_prompt_path)
+def generate_speech(model, text, audio_prompt_path=None,
+                    exaggeration=0.5, cfg_weight=0.5, temperature=0.8):
+    """Generate speech for text, with optional voice cloning via audio_prompt_path.
+    
+    Tuning knobs:
+      exaggeration: 0.0-1.0, higher = more expressive/dramatic (default 0.5)
+      cfg_weight:   0.0-1.0, higher = more faithful to prompt voice (default 0.5)
+      temperature:  0.0-1.0, higher = more varied/less robotic (default 0.8)
+    """
+    return model.generate(
+        text,
+        audio_prompt_path=audio_prompt_path,
+        exaggeration=exaggeration,
+        cfg_weight=cfg_weight,
+        temperature=temperature,
+    )
 
 
 if __name__ == "__main__":
