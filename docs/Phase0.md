@@ -44,32 +44,32 @@ RealTimeConApp/
 ## Day-by-Day Plan
 
 ### Day 1 — Git & Repo Foundation
-- [ ] `git init` (if not already a repo)
-- [ ] Create `.gitignore` (venv/, `__pycache__/`, `*.pyc`, model cache folders, generated audio output)
-- [ ] Initial commit to `main`: bare `.gitignore` + empty `README.md`
-- [ ] Create and switch to `phase0-setup`
+- [x] `git init` (if not already a repo)
+- [x] Create `.gitignore` (venv/, `__pycache__/`, `*.pyc`, model cache folders, generated audio output)
+- [x] Initial commit to `main`: bare `.gitignore` + empty `README.md`
+- [x] Create and switch to `phase0-setup`
 
 **Checkpoint:** `git log` shows the initial commit on `main`; everything after this happens on `phase0-setup`.
 
 ### Day 2 — Folder & Module Skeleton
-- [ ] Create the full folder tree above
-- [ ] Each `.py` file gets a one-line docstring describing its purpose — no logic yet
-- [ ] `main.py` just prints `"Scaffold OK"` so we can confirm it runs
+- [x] Create the full folder tree above
+- [x] Each `.py` file gets a one-line docstring describing its purpose — no logic yet
+- [x] `main.py` just prints `"Scaffold OK"` so we can confirm it runs
 
 **Checkpoint:** `python main.py` prints `Scaffold OK` with no errors.
 **Commit:** "Day 2: project skeleton scaffolded"
 
 ### Day 3 — Python Environment & Dependencies
-- [ ] Create a virtual environment inside the project folder
-- [ ] Confirm the exact Python version Chatterbox needs on Windows — verify rather than assume, this is exactly the kind of thing that quietly breaks later if skipped
-- [ ] Write `requirements.txt` with the expected packages (chatterbox-tts, the CPU build of torch, audio libs), pinned once confirmed
+- [x] Create a virtual environment inside the project folder
+- [x] Confirm the exact Python version Chatterbox needs on Windows — verify rather than assume, this is exactly the kind of thing that quietly breaks later if skipped
+- [x] Write `requirements.txt` with the expected packages (chatterbox-tts, the CPU build of torch, audio libs), pinned once confirmed
 
 **Checkpoint:** venv activates cleanly; `pip list` shows the baseline packages with no install errors.
 **Commit:** "Day 3: virtual environment + requirements.txt"
 
 ### Day 4 — External Tools (ffmpeg)
-- [ ] Install ffmpeg, confirm `ffmpeg -version` works from this same PowerShell session
-- [ ] Add a tiny sanity test in `tests/` that calls ffmpeg through a stub in `audio_utils.py`
+- [x] Install ffmpeg, confirm `ffmpeg -version` works from this same PowerShell session
+- [x] Add a tiny sanity test in `tests/` that calls ffmpeg through a stub in `audio_utils.py`
 
 **Checkpoint:** the sanity test passes and prints ffmpeg's version string.
 **Commit:** "Day 4: ffmpeg verified"
@@ -88,7 +88,7 @@ Reserve these in case Day 3 or 4 hits dependency or driver friction — given th
 
 ## Definition of Done
 
-- [ ] Skeleton exists with every file in its own place, properly separated
-- [ ] venv + requirements.txt verified working
-- [ ] ffmpeg verified working
+- [x] Skeleton exists with every file in its own place, properly separated
+- [x] venv + requirements.txt verified working
+- [x] ffmpeg verified working
 - [ ] `phase0-setup` merged into `main` and tagged `phase0-complete`
