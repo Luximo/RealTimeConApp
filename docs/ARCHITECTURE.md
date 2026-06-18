@@ -11,6 +11,20 @@
 - Pulls in `gradio` and its full demo-app web stack (fastapi, starlette, uvicorn, pandas, etc.) as a hard dependency, unused by this project. Harmless, just bulkier than expected.
 - `pydub` and `soundfile` arrive for free as transitive dependencies (via gradio and librosa respectively) — covers the audio-library need without a separate install step.
 
+## TTS Engine API Notes (Phase 1 findings)
+
+**Import path:** `from chatterbox.tts import ChatterboxTTS` — confirmed against the installed `0.1.7` source rather than assumed, since wrapper APIs like this can shift between versions.
+
+**`generate()` signature:** `generate(text, repetition_penalty=1.2, min_p=0.05, top_p=1.0, audio_prompt_path=None, exaggeration=0.5, cfg_weight=0.5, temperature=0.8)`. The three knobs that matter for tuning naturalness later are `exaggeration`, `cfg_weight`, and `temperature` — left untouched at their defaults for Phase 1's purposes.
+
+**Default voice mechanism:** `from_pretrained()` downloads and loads a built-in `conds.pt` (~107KB) that pre-populates `self.conds`. `generate()` has a hard assertion — `assert self.conds is not None` — if no `audio_prompt_path` is given and conds were somehow missing, so the default-voice path only "just works" because that file loads automatically; there's no silent fallback. For Phase 2, voice cloning happens by passing a reference clip through `audio_prompt_path`, which internally calls `self.prepare_conditionals(audio_prompt_path, exaggeration=exaggeration)` to replace `self.conds` with the cloned voice's conditioning.
+
+**Return value:** a `torch.Tensor` shaped `(1, N)` (mono, channels-first) with Resemble's Perth watermark already baked in — watermarking isn't optional or toggleable through any parameter seen in this version. `model.sr` holds the sample rate, used directly with `torchaudio.save(path, wav, model.sr)`.
+
+**Output quality at defaults:** the built-in default voice sounds flat and somewhat robotic — closer to a GPS/navigation voice than natural speech — at the default `exaggeration=0.5`, `cfg_weight=0.5`, `temperature=0.8`. Not a bug; this voice was never meant to be the final product. Real naturalness evaluation is deferred to Phase 2, once actual reference clips are in the loop.
+
+**Benign warnings seen on every load/generate call** (logged once here so they don't get re-investigated every phase): an unauthenticated-HF-Hub-requests notice, a `LoRACompatibleLinear` deprecation from `diffusers`, a `torch.backends.cuda.sdp_kernel()` deprecation, and an `sdpa`/`output_attentions` notice. All are upstream library noise unrelated to this project's code — none require action.
+
 ## Performance Baseline (Phase 1, Day 3)
 
 Single run, default built-in voice, no cloning, on the project's target hardware (Ryzen 7 5700G, CPU-only — the RX 6750 XT has no reliable ROCm path on this setup, see environment notes above).
