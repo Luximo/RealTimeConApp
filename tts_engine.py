@@ -1,1 +1,35 @@
 """All calls to the TTS engine isolated here."""
+
+import torch
+
+# --- CPU loading patch (Day 3 finding, Phase 0 ARCHITECTURE.md) ---
+# ChatterboxTTS.from_pretrained() calls torch.load() internally without
+# map_location. The checkpoint files were saved from a CUDA context, so on
+# a machine with no CUDA at all this throws a hard RuntimeError instead of
+# loading on CPU. Known, open issue in resemble-ai/chatterbox, not specific
+# to this setup. Fix: monkey-patch torch.load to default map_location="cpu"
+# whenever it is not explicitly passed, before calling from_pretrained --
+# same pattern Resemble AI uses in their own example_for_mac.py.
+_original_torch_load = torch.load
+
+
+def _patched_torch_load(*args, **kwargs):
+    if "map_location" not in kwargs and len(args) < 2:
+        kwargs["map_location"] = torch.device("cpu")
+    return _original_torch_load(*args, **kwargs)
+
+
+torch.load = _patched_torch_load
+
+from chatterbox.tts import ChatterboxTTS
+
+
+def load_model():
+    """Load the Chatterbox TTS model on CPU."""
+    return ChatterboxTTS.from_pretrained(device="cpu")
+
+
+if __name__ == "__main__":
+    print("Loading Chatterbox TTS model on CPU...")
+    model = load_model()
+    print("Model loaded successfully:", type(model))
