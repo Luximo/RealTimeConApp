@@ -12,3 +12,6 @@ __pycache__/
 # Generated audio output
 output/
 *.wav
+
+# Editor
+.vscode/
