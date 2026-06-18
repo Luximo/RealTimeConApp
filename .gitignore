@@ -1,0 +1,14 @@
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Model cache folders
+.cache/
+*.cache/
+
+# Generated audio output
+output/
+*.wav
