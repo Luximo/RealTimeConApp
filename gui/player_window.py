@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtCore import Qt, QUrl
 
 import config
 
@@ -33,7 +34,12 @@ class PlayerWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("RealTimeConApp")
         self.resize(900, 520)
+        self._duration_ms = 0  # set once durationChanged fires
+        self._user_seeking = False  # True while user drags the progress slider
         self._build_ui()
+        self._setup_player()
+
+    # ── UI construction ───────────────────────────────────────────────────────
 
     def _build_ui(self):
         central = QWidget()
@@ -42,11 +48,11 @@ class PlayerWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Caption display area ──────────────────────────────────────────────
+        # Caption display area
         self.caption_display = CaptionDisplay()
         root.addWidget(self.caption_display)
 
-        # ── Controls bar ─────────────────────────────────────────────────────
+        # Controls bar
         controls = QWidget()
         controls.setStyleSheet("background-color: #16213e;")
         controls.setFixedHeight(70)
@@ -111,6 +117,81 @@ class PlayerWindow(QMainWindow):
 
         root.addWidget(controls)
 
+        # Wire transport buttons
+        self.btn_restart.clicked.connect(self._on_restart)
+        self.btn_play.clicked.connect(self._on_play_pause)
+        self.btn_stop.clicked.connect(self._on_stop)
+
+        # Wire progress slider seeking
+        self.progress.sliderPressed.connect(self._on_seek_start)
+        self.progress.sliderReleased.connect(self._on_seek_end)
+
+    def _setup_player(self):
+        """Initialise QMediaPlayer and point it at conversation_final.wav."""
+        self._audio_output = QAudioOutput()
+        self._audio_output.setVolume(1.0)
+
+        self._player = QMediaPlayer()
+        self._player.setAudioOutput(self._audio_output)
+
+        audio_path = config.OUTPUT_DIR / "conversation_final.wav"
+        self._player.setSource(QUrl.fromLocalFile(str(audio_path)))
+
+        # Connect player signals
+        self._player.durationChanged.connect(self._on_duration_changed)
+        self._player.positionChanged.connect(self._on_position_changed)
+        self._player.playbackStateChanged.connect(self._on_state_changed)
+
+    # ── Transport slots ───────────────────────────────────────────────────────
+
+    def _on_play_pause(self):
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
+        else:
+            self._player.play()
+
+    def _on_stop(self):
+        self._player.stop()
+        self.progress.setValue(0)
+
+    def _on_restart(self):
+        self._player.setPosition(0)
+        self._player.play()
+
+    # ── Player signal handlers ────────────────────────────────────────────────
+
+    def _on_duration_changed(self, duration_ms: int):
+        """Called once when media loads and duration becomes known."""
+        self._duration_ms = duration_ms
+
+    def _on_position_changed(self, position_ms: int):
+        """Called ~every 100ms by QMediaPlayer during playback."""
+        if self._user_seeking or self._duration_ms == 0:
+            return
+        slider_val = int(position_ms / self._duration_ms * 1000)
+        self.progress.setValue(slider_val)
+
+    def _on_state_changed(self, state):
+        """Flip play/pause button icon to match actual player state."""
+        if state == QMediaPlayer.PlaybackState.PlayingState:
+            self.btn_play.setText("⏸")
+        else:
+            self.btn_play.setText("▶")
+
+    # ── Progress slider seeking ───────────────────────────────────────────────
+
+    def _on_seek_start(self):
+        self._user_seeking = True
+
+    def _on_seek_end(self):
+        self._user_seeking = False
+        if self._duration_ms > 0:
+            target_ms = int(self.progress.value() / 1000 * self._duration_ms)
+            self._player.setPosition(target_ms)
+
+    # ── Speed slider ─────────────────────────────────────────────────────────
+
     def _on_speed_changed(self, value: int):
         factor = value / 10.0
         self.speed_value_label.setText(f"{factor:.1f}x")
+        self._player.setPlaybackRate(factor)
