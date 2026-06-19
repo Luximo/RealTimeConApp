@@ -23,6 +23,11 @@ NUM_WORKERS = 8   # matches Ryzen 7 5700G core count; tune down in config if RAM
 # ── Pause durations between turns (seconds) ───────────────────────────────────
 INTER_SPEAKER_PAUSE = 0.3    # gap between different speakers
 SAME_SPEAKER_PAUSE  = 0.15   # gap between consecutive same-speaker turns
+TURN_FADE_IN_MS    = 25     # ms fade-in on each clip to eliminate leading plosives
+
+# ── Silence trimming ──────────────────────────────────────────────────────────
+SILENCE_THRESH_DB  = -45    # dBFS below which audio is treated as silence
+SILENCE_MIN_MS     = 150    # minimum silence duration to detect and trim (ms)
 
 # ── Chunking ──────────────────────────────────────────────────────────────────
 SHORT_TURN_WORD_THRESHOLD = 8   # turns below this get merged with next same-speaker turn

@@ -33,38 +33,49 @@ def _worker_run(args):
     chunk, output_dir_str = args
     output_dir = Path(output_dir_str)
 
-    chunk_idx   = chunk["chunk_idx"]
-    s1_ref      = chunk["speaker1_ref"]
-    s2_ref      = chunk["speaker2_ref"]
+    chunk_idx = chunk["chunk_idx"]
+    s1_ref = chunk["speaker1_ref"]
+    s2_ref = chunk["speaker2_ref"]
     s1_settings = chunk["speaker1_settings"]
     s2_settings = chunk["speaker2_settings"]
 
     results = []
 
     for turn_idx, (speaker, text) in enumerate(chunk["turns"]):
-        ref_clip = s1_ref      if speaker == "S1" else s2_ref
+        ref_clip = s1_ref if speaker == "S1" else s2_ref
         settings = s1_settings if speaker == "S1" else s2_settings
 
-        wav = tts_engine.generate_speech(
-            _model, text,
-            audio_prompt_path=ref_clip,
-            **settings,
+        try:
+            wav = tts_engine.generate_speech(
+                _model,
+                text,
+                audio_prompt_path=ref_clip,
+                **settings,
+            )
+
+            out_path = output_dir / f"chunk_{chunk_idx:02d}_turn_{turn_idx:02d}.wav"
+            torchaudio.save(str(out_path), wav, _model.sr)
+
+        except Exception as exc:
+            raise RuntimeError(
+                f"Worker failed at chunk {chunk_idx}, turn {turn_idx} "
+                f"({speaker}: {text[:60]!r})"
+            ) from exc
+
+        results.append(
+            {
+                "chunk_idx": chunk_idx,
+                "turn_idx": turn_idx,
+                "speaker": speaker,
+                "path": str(out_path),
+            }
         )
-
-        out_path = output_dir / f"chunk_{chunk_idx:02d}_turn_{turn_idx:02d}.wav"
-        torchaudio.save(str(out_path), wav, _model.sr)
-
-        results.append({
-            "chunk_idx": chunk_idx,
-            "turn_idx":  turn_idx,
-            "speaker":   speaker,       # needed by stitch_conversation
-            "path":      str(out_path),
-        })
 
     return results
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def run_sequential(chunks: list, output_dir: Path = None) -> list:
     """
@@ -81,20 +92,23 @@ def run_sequential(chunks: list, output_dir: Path = None) -> list:
     results = []
 
     for chunk in chunks:
-        chunk_idx   = chunk["chunk_idx"]
-        s1_ref      = chunk["speaker1_ref"]
-        s2_ref      = chunk["speaker2_ref"]
+        chunk_idx = chunk["chunk_idx"]
+        s1_ref = chunk["speaker1_ref"]
+        s2_ref = chunk["speaker2_ref"]
         s1_settings = chunk["speaker1_settings"]
         s2_settings = chunk["speaker2_settings"]
 
         for turn_idx, (speaker, text) in enumerate(chunk["turns"]):
-            ref_clip = s1_ref      if speaker == "S1" else s2_ref
+            ref_clip = s1_ref if speaker == "S1" else s2_ref
             settings = s1_settings if speaker == "S1" else s2_settings
 
-            print(f"  chunk {chunk_idx:02d} | turn {turn_idx:02d} | {speaker} | {text[:60]}")
+            print(
+                f"  chunk {chunk_idx:02d} | turn {turn_idx:02d} | {speaker} | {text[:60]}"
+            )
 
             wav = tts_engine.generate_speech(
-                model, text,
+                model,
+                text,
                 audio_prompt_path=ref_clip,
                 **settings,
             )
@@ -103,25 +117,29 @@ def run_sequential(chunks: list, output_dir: Path = None) -> list:
             torchaudio.save(str(out_path), wav, model.sr)
             print(f"    → saved: {out_path.name}\n")
 
-            results.append({
-                "chunk_idx": chunk_idx,
-                "turn_idx":  turn_idx,
-                "speaker":   speaker,   # needed by stitch_conversation
-                "path":      str(out_path),
-            })
+            results.append(
+                {
+                    "chunk_idx": chunk_idx,
+                    "turn_idx": turn_idx,
+                    "speaker": speaker,  # needed by stitch_conversation
+                    "path": str(out_path),
+                }
+            )
 
     results.sort(key=lambda r: (r["chunk_idx"], r["turn_idx"]))
     return results
 
 
-def run_parallel(chunks: list, output_dir: Path = None, num_workers: int = None) -> list:
+def run_parallel(
+    chunks: list, output_dir: Path = None, num_workers: int = None
+) -> list:
     """
     Generate all turns using multiprocessing.Pool.
     Each worker loads the model once at pool init, then processes its chunk.
 
     IMPORTANT — Windows spawn mode: caller must guard with `if __name__ == "__main__":`.
     """
-    output_dir  = Path(output_dir or config.OUTPUT_DIR)
+    output_dir = Path(output_dir or config.OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     num_workers = num_workers or config.NUM_WORKERS
 
@@ -142,9 +160,9 @@ def run_parallel(chunks: list, output_dir: Path = None, num_workers: int = None)
     return results
 
 
-def render_conversation(chunks: list,
-                        output_dir: Path = None,
-                        num_workers: int = None) -> Path:
+def render_conversation(
+    chunks: list, output_dir: Path = None, num_workers: int = None
+) -> Path:
     """
     Full pipeline: parallel generation → stitching → one finished WAV.
 
@@ -152,6 +170,6 @@ def render_conversation(chunks: list,
 
     IMPORTANT — Windows spawn mode: caller must guard with `if __name__ == "__main__":`.
     """
-    results      = run_parallel(chunks, output_dir=output_dir, num_workers=num_workers)
-    final_path   = stitch_conversation(results)
+    results = run_parallel(chunks, output_dir=output_dir, num_workers=num_workers)
+    final_path = stitch_conversation(results)
     return final_path
