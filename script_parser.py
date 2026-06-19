@@ -27,7 +27,7 @@ def _merge_short(lines: list, threshold: int) -> list:
     while i < len(lines):
         word_count = len(lines[i].split())
         if word_count < threshold and i + 1 < len(lines):
-            merged.append(lines[i] + ", " + lines[i + 1])
+            merged.append(lines[i] + " " + lines[i + 1])
             i += 2
         else:
             merged.append(lines[i])

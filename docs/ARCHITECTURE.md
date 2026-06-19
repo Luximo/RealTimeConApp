@@ -96,3 +96,59 @@ Same hardware as Phase 1 baseline (7.39x RTF, no cloning).
 - Model load time with cloning: ~8–13s (vs 7.89s Phase 1 baseline) — load once, reuse
 
 Living doc of how the pieces fit together — filled in as modules take shape.
+## Parallel Batch Render Timing (Phase 3, Day 5)
+
+Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+
+| Metric              | Value                        |
+|---------------------|------------------------------|
+| Total turns         | 16                            |
+| Chunks              | 7                             |
+| Workers used        | 7                             |
+| Wall-clock time     | 663.3s (11.1 min)         |
+| Sequential estimate | 724.6s                       |
+| Parallel speedup    | 1.09x                         |
+| Output audio length | 71.38s                      |
+| Inter-speaker pause | 0.3s (tuned Day 4)           |
+
+**Key implication for longer scripts:**
+At 1.09x speedup on a 16-turn script, a 60-turn (~10 min audio)
+conversation would render in roughly 41.5 min wall-clock time.
+
+## Parallel Batch Render Timing (Phase 3, Day 5)
+
+Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+
+| Metric              | Value                        |
+|---------------------|------------------------------|
+| Total turns         | 16                            |
+| Chunks              | 7                             |
+| Workers used        | 7                             |
+| Wall-clock time     | 643.7s (10.7 min)         |
+| Sequential estimate | 724.6s                       |
+| Parallel speedup    | 1.13x                         |
+| Output audio length | 72.66s                      |
+| Inter-speaker pause | 0.3s (tuned Day 4)           |
+
+**Key implication for longer scripts:**
+At 1.13x speedup on a 16-turn script, a 60-turn (~10 min audio)
+conversation would render in roughly 40.2 min wall-clock time.
+
+## Parallel Batch Render Timing (Phase 3, Day 5)
+
+Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+
+| Metric              | Value                        |
+|---------------------|------------------------------|
+| Total turns         | 16                            |
+| Chunks              | 7                             |
+| Workers used        | 7                             |
+| Wall-clock time     | 622.6s (10.4 min)         |
+| Sequential estimate | 724.6s                       |
+| Parallel speedup    | 1.16x                         |
+| Output audio length | 70.58s                      |
+| Inter-speaker pause | 0.3s (tuned Day 4)           |
+
+**Key implication for longer scripts:**
+At 1.16x speedup on a 16-turn script, a 60-turn (~10 min audio)
+conversation would render in roughly 38.9 min wall-clock time.
