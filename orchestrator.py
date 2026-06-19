@@ -9,6 +9,7 @@ import torchaudio
 import config
 import tts_engine
 from audio_utils import stitch_conversation
+from captions import generate_captions
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,20 @@ def _worker_init():
 
 def _worker_run(args):
     """
-    Process one chunk: generate every turn and save numbered WAV files.
+    Process one chunk: generate every sub-clip and save numbered WAV files.
+
+    Handles the Phase 4 turn format:
+        chunk["turns"] = [
+            {"speaker": "S1", "sub_clips": [{"text": str, "pause_after": float}, ...]},
+            ...
+        ]
+
+    Output filename per sub-clip:
+        chunk_{chunk_idx:02d}_turn_{turn_idx:02d}_sc_{sc_idx:02d}.wav
+
+    Each result dict includes text and pause_after so stitch_conversation
+    and build_captions both have what they need without re-reading the script.
+
     Self-contained and picklable — required for Windows spawn mode.
     """
     chunk, output_dir_str = args
@@ -41,35 +55,46 @@ def _worker_run(args):
 
     results = []
 
-    for turn_idx, (speaker, text) in enumerate(chunk["turns"]):
+    for turn_idx, turn in enumerate(chunk["turns"]):
+        speaker = turn["speaker"]
         ref_clip = s1_ref if speaker == "S1" else s2_ref
         settings = s1_settings if speaker == "S1" else s2_settings
 
-        try:
-            wav = tts_engine.generate_speech(
-                _model,
-                text,
-                audio_prompt_path=ref_clip,
-                **settings,
+        for sc_idx, sub_clip in enumerate(turn["sub_clips"]):
+            text = sub_clip["text"]
+            pause_after = sub_clip["pause_after"]
+
+            try:
+                wav = tts_engine.generate_speech(
+                    _model,
+                    text,
+                    audio_prompt_path=ref_clip,
+                    **settings,
+                )
+
+                out_path = (
+                    output_dir
+                    / f"chunk_{chunk_idx:02d}_turn_{turn_idx:02d}_sc_{sc_idx:02d}.wav"
+                )
+                torchaudio.save(str(out_path), wav, _model.sr)
+
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Worker failed at chunk {chunk_idx}, turn {turn_idx}, "
+                    f"sub-clip {sc_idx} ({speaker}: {text[:60]!r})"
+                ) from exc
+
+            results.append(
+                {
+                    "chunk_idx": chunk_idx,
+                    "turn_idx": turn_idx,
+                    "sub_clip_idx": sc_idx,
+                    "speaker": speaker,
+                    "path": str(out_path),
+                    "text": text,
+                    "pause_after": pause_after,
+                }
             )
-
-            out_path = output_dir / f"chunk_{chunk_idx:02d}_turn_{turn_idx:02d}.wav"
-            torchaudio.save(str(out_path), wav, _model.sr)
-
-        except Exception as exc:
-            raise RuntimeError(
-                f"Worker failed at chunk {chunk_idx}, turn {turn_idx} "
-                f"({speaker}: {text[:60]!r})"
-            ) from exc
-
-        results.append(
-            {
-                "chunk_idx": chunk_idx,
-                "turn_idx": turn_idx,
-                "speaker": speaker,
-                "path": str(out_path),
-            }
-        )
 
     return results
 
@@ -80,7 +105,8 @@ def _worker_run(args):
 def run_sequential(chunks: list, output_dir: Path = None) -> list:
     """
     Generate all turns sequentially — one model load, one loop, no workers.
-    Written on Day 2 to verify generation logic before parallelism was introduced.
+    Updated for Phase 4: handles sub-clip turn format, includes text/pause_after
+    in results, uses new sc-indexed filename format.
     """
     output_dir = Path(output_dir or config.OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -98,35 +124,47 @@ def run_sequential(chunks: list, output_dir: Path = None) -> list:
         s1_settings = chunk["speaker1_settings"]
         s2_settings = chunk["speaker2_settings"]
 
-        for turn_idx, (speaker, text) in enumerate(chunk["turns"]):
+        for turn_idx, turn in enumerate(chunk["turns"]):
+            speaker = turn["speaker"]
             ref_clip = s1_ref if speaker == "S1" else s2_ref
             settings = s1_settings if speaker == "S1" else s2_settings
 
-            print(
-                f"  chunk {chunk_idx:02d} | turn {turn_idx:02d} | {speaker} | {text[:60]}"
-            )
+            for sc_idx, sub_clip in enumerate(turn["sub_clips"]):
+                text = sub_clip["text"]
+                pause_after = sub_clip["pause_after"]
 
-            wav = tts_engine.generate_speech(
-                model,
-                text,
-                audio_prompt_path=ref_clip,
-                **settings,
-            )
+                print(
+                    f"  chunk {chunk_idx:02d} | turn {turn_idx:02d} | sc {sc_idx:02d} "
+                    f"| {speaker} | {text[:60]}"
+                )
 
-            out_path = output_dir / f"chunk_{chunk_idx:02d}_turn_{turn_idx:02d}.wav"
-            torchaudio.save(str(out_path), wav, model.sr)
-            print(f"    → saved: {out_path.name}\n")
+                wav = tts_engine.generate_speech(
+                    model,
+                    text,
+                    audio_prompt_path=ref_clip,
+                    **settings,
+                )
 
-            results.append(
-                {
-                    "chunk_idx": chunk_idx,
-                    "turn_idx": turn_idx,
-                    "speaker": speaker,  # needed by stitch_conversation
-                    "path": str(out_path),
-                }
-            )
+                out_path = (
+                    output_dir
+                    / f"chunk_{chunk_idx:02d}_turn_{turn_idx:02d}_sc_{sc_idx:02d}.wav"
+                )
+                torchaudio.save(str(out_path), wav, model.sr)
+                print(f"    → saved: {out_path.name}\n")
 
-    results.sort(key=lambda r: (r["chunk_idx"], r["turn_idx"]))
+                results.append(
+                    {
+                        "chunk_idx": chunk_idx,
+                        "turn_idx": turn_idx,
+                        "sub_clip_idx": sc_idx,
+                        "speaker": speaker,
+                        "path": str(out_path),
+                        "text": text,
+                        "pause_after": pause_after,
+                    }
+                )
+
+    results.sort(key=lambda r: (r["chunk_idx"], r["turn_idx"], r["sub_clip_idx"]))
     return results
 
 
@@ -156,7 +194,7 @@ def run_parallel(
         chunk_results = pool.map(_worker_run, args)
 
     results = [r for chunk_result in chunk_results for r in chunk_result]
-    results.sort(key=lambda r: (r["chunk_idx"], r["turn_idx"]))
+    results.sort(key=lambda r: (r["chunk_idx"], r["turn_idx"], r["sub_clip_idx"]))
     return results
 
 
@@ -164,7 +202,14 @@ def render_conversation(
     chunks: list, output_dir: Path = None, num_workers: int = None
 ) -> Path:
     """
-    Full pipeline: parallel generation → stitching → one finished WAV.
+    Full pipeline: parallel generation → stitching → captions → finished WAV.
+
+    Produces two output files:
+        output/conversation_final.wav  — stitched audio
+        output/captions.json           — word-level timestamps
+
+    Both are derived from the same result set in the same pass, so clip
+    durations used for timestamp derivation exactly match the audio.
 
     Returns the path to conversation_final.wav.
 
@@ -172,4 +217,9 @@ def render_conversation(
     """
     results = run_parallel(chunks, output_dir=output_dir, num_workers=num_workers)
     final_path = stitch_conversation(results)
+    print(f"Audio written:    {final_path}")
+
+    captions_path = generate_captions(results)
+    print(f"Captions written: {captions_path}")
+
     return final_path
