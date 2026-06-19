@@ -96,58 +96,47 @@ Same hardware as Phase 1 baseline (7.39x RTF, no cloning).
 - Model load time with cloning: ~8–13s (vs 7.89s Phase 1 baseline) — load once, reuse
 
 Living doc of how the pieces fit together — filled in as modules take shape.
-## Parallel Batch Render Timing (Phase 3, Day 5)
+## Phase 3 Findings
 
-Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+### Parallel Batch Render Timing (best run, 16-turn sample script)
 
-| Metric              | Value                        |
-|---------------------|------------------------------|
-| Total turns         | 16                            |
-| Chunks              | 7                             |
-| Workers used        | 7                             |
-| Wall-clock time     | 663.3s (11.1 min)         |
-| Sequential estimate | 724.6s                       |
-| Parallel speedup    | 1.09x                         |
-| Output audio length | 71.38s                      |
-| Inter-speaker pause | 0.3s (tuned Day 4)           |
+| Metric              | Value                  |
+|---------------------|------------------------|
+| Total turns         | 16                     |
+| Chunks              | 7                      |
+| Workers used        | 7                      |
+| Wall-clock time     | 622.6s (10.4 min)      |
+| Sequential estimate | 724.6s                 |
+| Parallel speedup    | 1.16x                  |
+| Output audio length | 70.58s                 |
+| Inter-speaker pause | 0.3s (tuned Day 4)     |
 
-**Key implication for longer scripts:**
-At 1.09x speedup on a 16-turn script, a 60-turn (~10 min audio)
-conversation would render in roughly 41.5 min wall-clock time.
+**Speedup reality on this hardware:** With 7 workers competing for 8 cores, each worker
+gets ~1 core and runs ~4–5x slower individually. Wall-clock time is gated by the slowest
+chunk, so speedup is modest (1.09–1.16x across runs) on a 16-turn script. The real payoff
+will appear with GPU acceleration (Phase 6) or on hardware with more cores.
 
-## Parallel Batch Render Timing (Phase 3, Day 5)
+**Implication for longer scripts:** At ~1.1x speedup on this hardware, a 60-turn
+(~10 min audio) conversation would render in roughly 38–42 min wall-clock time on CPU.
 
-Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+### Audio Pipeline Tuning (Days 4–6)
 
-| Metric              | Value                        |
-|---------------------|------------------------------|
-| Total turns         | 16                            |
-| Chunks              | 7                             |
-| Workers used        | 7                             |
-| Wall-clock time     | 643.7s (10.7 min)         |
-| Sequential estimate | 724.6s                       |
-| Parallel speedup    | 1.13x                         |
-| Output audio length | 72.66s                      |
-| Inter-speaker pause | 0.3s (tuned Day 4)           |
+- **Inter-speaker pause:** tuned to **0.3s** (down from default 0.4s) for natural flow
+- **Merge separator:** changed from `", "` to `" "` (space) — comma caused TTS to
+  insert an unnatural pause mid-merged-turn
+- **Silence trimming:** `-45 dBFS` threshold, `150ms` minimum — strips leading/trailing
+  dead air that TTS sometimes generates at utterance boundaries
+- **Fade-in per clip:** `25ms` — eliminates leading plosive ("B") artifacts from
+  voice conditioning at the start of male speaker turns
+- **Worker error wrapping:** `_worker_run` wraps generation in try/except and re-raises
+  with `chunk_idx`, `turn_idx`, speaker, and text context for readable failure messages
 
-**Key implication for longer scripts:**
-At 1.13x speedup on a 16-turn script, a 60-turn (~10 min audio)
-conversation would render in roughly 40.2 min wall-clock time.
+### Edge Cases Verified (Day 6)
 
-## Parallel Batch Render Timing (Phase 3, Day 5)
-
-Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
-
-| Metric              | Value                        |
-|---------------------|------------------------------|
-| Total turns         | 16                            |
-| Chunks              | 7                             |
-| Workers used        | 7                             |
-| Wall-clock time     | 622.6s (10.4 min)         |
-| Sequential estimate | 724.6s                       |
-| Parallel speedup    | 1.16x                         |
-| Output audio length | 70.58s                      |
-| Inter-speaker pause | 0.3s (tuned Day 4)           |
+- Unequal line counts: parser warns and stops at shorter file, no silent data loss ✅
+- Very long turn (61 words): kept as one atomic turn, no split ✅
+- Fewer chunks than workers: pool caps at `min(NUM_WORKERS, len(chunks))` ✅
+- Worker failure: exception propagates through `pool.map` cleanly, no hang ✅
 
 **Key implication for longer scripts:**
 At 1.16x speedup on a 16-turn script, a 60-turn (~10 min audio)
