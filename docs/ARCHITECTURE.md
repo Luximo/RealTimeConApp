@@ -95,7 +95,6 @@ Same hardware as Phase 1 baseline (7.39x RTF, no cloning).
 - Speaker 2 generates consistently faster than Speaker 1 at equivalent word counts
 - Model load time with cloning: ~8–13s (vs 7.89s Phase 1 baseline) — load once, reuse
 
-Living doc of how the pieces fit together — filled in as modules take shape.
 ## Phase 3 Findings
 
 ### Parallel Batch Render Timing (best run, 16-turn sample script)
@@ -141,3 +140,93 @@ will appear with GPU acceleration (Phase 6) or on hardware with more cores.
 **Key implication for longer scripts:**
 At 1.16x speedup on a 16-turn script, a 60-turn (~10 min audio)
 conversation would render in roughly 38.9 min wall-clock time.
+
+
+## Phase 4 Findings
+
+### Caption Timing Design
+Word-level timestamps are derived proportionally from clip durations — no transcription
+model used. For each sub-clip, its trimmed duration is divided evenly across its words:
+
+    word_start = clip_start + (word_idx / word_count) * clip_duration
+    word_end   = clip_start + ((word_idx + 1) / word_count) * clip_duration
+
+This is faster, fully offline, and grounded in the actual audio structure rather than
+inferred from it. Approximation is inherent — short words ("I", "a") get the same time
+slice as long words ("conversation", "frustrating") — but is acceptable for scrolling
+caption display where turn-level sync matters more than frame-accurate word highlighting.
+
+### [pause:N] Marker System
+Four formats supported, constants defined in `config.py`:
+
+| Marker          | Duration             |
+|-----------------|----------------------|
+| `[pause]`       | DEFAULT_PAUSE_DURATION = 0.5s |
+| `[pause:short]` | SHORT_PAUSE_DURATION  = 0.3s |
+| `[pause:long]`  | LONG_PAUSE_DURATION   = 3.0s |
+| `[pause:N]`     | exactly N seconds (float or int) |
+
+Markers are stripped before any TTS call — Chatterbox never sees them. Each turn is
+split into sub-clips at marker positions; each sub-clip gets its own WAV file and its
+own timestamp range in captions.json. The silence between sub-clips is inserted by
+`stitch_conversation` using the `pause_after` field carried in every result dict.
+
+Edge cases verified:
+- Multiple consecutive markers in one turn → each pause duration preserved correctly
+- Marker at very start of turn → duration discarded (nothing to hold), warning logged
+- Marker at very end of turn → pause_after forced to 0.0 (last sub-clip rule)
+- Turn consisting entirely of markers (no words) → empty sub-clip list, turn skipped
+  with warning, surrounding turns unaffected
+- Script with no markers → single sub-clip per turn, timestamps correct throughout
+
+### captions.json Format (Phase 5 reference)
+Written to `output/captions.json` automatically on every `render_conversation()` call.
+One entry per word, globally ordered:
+
+```json
+[
+  {"word": "Did",   "start": 0.000, "end": 0.237, "speaker": "S1"},
+  {"word": "you",   "start": 0.237, "end": 0.474, "speaker": "S1"},
+  {"word": "Don't", "start": 2.431, "end": 2.701, "speaker": "S2"},
+  ...
+]
+```
+
+- `word` — clean text token (punctuation attached, markers stripped)
+- `start` / `end` — absolute seconds from the start of `conversation_final.wav`
+- `speaker` — "S1" or "S2", from turn metadata, never from transcription
+
+The 0.3s gap between the last S1 word's `end` and the first S2 word's `start` is
+`INTER_SPEAKER_PAUSE`. Phase 5 detects this gap to trigger screen clears and visual
+speaker transitions.
+
+For `[pause:N]` gaps within a turn: the last word of the pre-pause sub-clip holds on
+screen for N seconds, then the next sub-clip's words begin. No entry is emitted for
+the silence itself — it appears as a gap in the timestamps.
+
+### Timestamp Accuracy (Day 5 observations)
+- Python `time.sleep()` accuracy: **+0.2ms average offset** — precise enough for
+  caption display; no drift accumulation across 187 words / 63s of content
+- Perceptual sync is good at the **turn level** (speaker switches happen at the right
+  moments); individual word timing within a turn is approximate by design
+- Captions and audio **must be produced in the same pipeline pass** to guarantee
+  consistent clip durations. Using mismatched processing paths (e.g. a Phase 3 restitch
+  vs Phase 4 `build_captions`) causes compounding drift that makes speaker labels appear
+  offset by one turn. Day 6's `render_conversation()` fixes this by calling both
+  `stitch_conversation` and `generate_captions` on the same result set.
+
+### Output File Naming (Phase 4 format)
+Sub-clip WAV files use a three-part index:
+
+    chunk_{chunk_idx:02d}_turn_{turn_idx:02d}_sc_{sc_idx:02d}.wav
+
+For turns with no pause markers, `sc_idx` is always `00`. Turns with markers produce
+`sc_00`, `sc_01`, ... for each text segment between markers.
+
+### Phase 4 Verification Stats (Day 4)
+- Script: 16 turns, 7 chunks, 187 total words
+- captions.json final timestamp: 63.37s
+- All 11 structural checks passed: ascending timestamps, correct word count,
+  correct speaker labels, no overlaps, no negatives, start < end for every entry
+
+Living doc of how the pieces fit together — filled in as modules take shape.
