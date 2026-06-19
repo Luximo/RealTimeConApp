@@ -8,12 +8,11 @@ import torchaudio
 
 import config
 import tts_engine
+from audio_utils import stitch_conversation
 
 logger = logging.getLogger(__name__)
 
 # ── Per-worker global ─────────────────────────────────────────────────────────
-# Set once by _worker_init at pool startup; reused for every turn in that worker.
-# Must live at module level — NOT inside a function — for Windows spawn mode.
 _model = None
 
 
@@ -29,8 +28,7 @@ def _worker_init():
 def _worker_run(args):
     """
     Process one chunk: generate every turn and save numbered WAV files.
-    Receives (chunk_dict, output_dir_str) — fully self-contained and picklable,
-    which is required for Windows spawn mode.
+    Self-contained and picklable — required for Windows spawn mode.
     """
     chunk, output_dir_str = args
     output_dir = Path(output_dir_str)
@@ -59,6 +57,7 @@ def _worker_run(args):
         results.append({
             "chunk_idx": chunk_idx,
             "turn_idx":  turn_idx,
+            "speaker":   speaker,       # needed by stitch_conversation
             "path":      str(out_path),
         })
 
@@ -70,7 +69,7 @@ def _worker_run(args):
 def run_sequential(chunks: list, output_dir: Path = None) -> list:
     """
     Generate all turns sequentially — one model load, one loop, no workers.
-    Written on Day 2 to verify generation logic before parallelism is introduced.
+    Written on Day 2 to verify generation logic before parallelism was introduced.
     """
     output_dir = Path(output_dir or config.OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -107,6 +106,7 @@ def run_sequential(chunks: list, output_dir: Path = None) -> list:
             results.append({
                 "chunk_idx": chunk_idx,
                 "turn_idx":  turn_idx,
+                "speaker":   speaker,   # needed by stitch_conversation
                 "path":      str(out_path),
             })
 
@@ -117,15 +117,9 @@ def run_sequential(chunks: list, output_dir: Path = None) -> list:
 def run_parallel(chunks: list, output_dir: Path = None, num_workers: int = None) -> list:
     """
     Generate all turns using multiprocessing.Pool.
+    Each worker loads the model once at pool init, then processes its chunk.
 
-    Each worker loads the model once at pool init (via _worker_init), then
-    processes its assigned chunk. Workers are capped at min(num_workers, len(chunks))
-    so we never spin up idle processes that still pay the model-load cost.
-
-    IMPORTANT — Windows spawn mode:
-    The caller MUST guard the call to this function with:
-        if __name__ == "__main__":
-    Omitting that guard causes recursive process spawning and the pool hangs.
+    IMPORTANT — Windows spawn mode: caller must guard with `if __name__ == "__main__":`.
     """
     output_dir  = Path(output_dir or config.OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -143,8 +137,21 @@ def run_parallel(chunks: list, output_dir: Path = None, num_workers: int = None)
     ) as pool:
         chunk_results = pool.map(_worker_run, args)
 
-    # Flatten and sort — pool.map preserves submission order, but we sort
-    # explicitly so downstream code never has to assume that invariant.
     results = [r for chunk_result in chunk_results for r in chunk_result]
     results.sort(key=lambda r: (r["chunk_idx"], r["turn_idx"]))
     return results
+
+
+def render_conversation(chunks: list,
+                        output_dir: Path = None,
+                        num_workers: int = None) -> Path:
+    """
+    Full pipeline: parallel generation → stitching → one finished WAV.
+
+    Returns the path to conversation_final.wav.
+
+    IMPORTANT — Windows spawn mode: caller must guard with `if __name__ == "__main__":`.
+    """
+    results      = run_parallel(chunks, output_dir=output_dir, num_workers=num_workers)
+    final_path   = stitch_conversation(results)
+    return final_path

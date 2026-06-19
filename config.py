@@ -21,7 +21,7 @@ SPEAKER2_SETTINGS = {"exaggeration": 0.7, "cfg_weight": 0.5, "temperature": 0.90
 NUM_WORKERS = 8   # matches Ryzen 7 5700G core count; tune down in config if RAM pressure
 
 # ── Pause durations between turns (seconds) ───────────────────────────────────
-INTER_SPEAKER_PAUSE = 0.4    # gap between different speakers
+INTER_SPEAKER_PAUSE = 0.3    # gap between different speakers
 SAME_SPEAKER_PAUSE  = 0.15   # gap between consecutive same-speaker turns
 
 # ── Chunking ──────────────────────────────────────────────────────────────────
