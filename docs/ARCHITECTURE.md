@@ -41,4 +41,58 @@ Of the 30.16s generation time, roughly the first 18s is the autoregressive token
 
 **Implication:** at ~7.4x real-time, CPU-only generation suits Phase 3's pre-render approach fine, since the whole conversation only needs to be rendered once before playback. It's a number worth flagging for Phase 6, though — a live generate-and-play pipeline at this speed would feel sluggish without GPU acceleration, a faster model, or some pipelining trick. Not a blocker now, just a flag for later.
 
+## Voice Cloning Findings (Phase 2)
+
+### Reference Clips
+Both clips recorded by the actual speakers, converted to proper WAV format via ffmpeg
+(originals were 3GP/AMR from phone recordings). Final format: 44100Hz, mono, 16-bit PCM.
+- `scripts/speaker1_ref.wav` — male voice, 31.17s
+- `scripts/speaker2_ref.wav` — female voice, 30.44s
+
+Note: speaker2_ref source was AMR at 8000Hz (phone voice memo). Upsampled to 44100Hz on
+conversion — cloning quality was still verified acceptable on listening test.
+
+### How Cloning Works (confirmed against 0.1.7 source)
+Passing `audio_prompt_path` to `generate()` triggers an internal call to
+`prepare_conditionals(audio_prompt_path, exaggeration=exaggeration)`, which replaces
+`self.conds` with conditioning derived from the reference clip. Zero-shot — no training,
+no fine-tuning, happens at generation time on every call.
+
+### Tuned Settings Per Speaker (Day 4 findings)
+Both voices verified to sound recognizably like their reference clips at these settings.
+Speaker 1 and Speaker 2 respond differently — do not use the same settings for both.
+
+**Speaker 1 (male):**
+- exaggeration: 0.6
+- cfg_weight: 0.4
+- temperature: 0.85
+- Variant label: "natural"
+
+**Speaker 2 (female):**
+- exaggeration: 0.7
+- cfg_weight: 0.5
+- temperature: 0.9
+- Variant label: "expressive"
+
+### Timing Baseline With Cloning (Day 5 findings)
+Measured on Ryzen 7 5700G, CPU-only, at tuned settings per speaker.
+Same hardware as Phase 1 baseline (7.39x RTF, no cloning).
+
+| Speaker  | Length | Words | Gen Time | Audio  | RTF    | Peak Mem |
+|----------|--------|-------|----------|--------|--------|----------|
+| speaker1 | short  | 3     | 25.13s   | 1.08s  | 23.27x | 23.4 MB  |
+| speaker1 | medium | 15    | 53.43s   | 5.16s  | 10.36x | 14.4 MB  |
+| speaker1 | long   | 40    | 99.57s   | 12.24s | 8.13x  | 14.4 MB  |
+| speaker2 | short  | 3     | 19.72s   | 1.36s  | 14.50x | 14.0 MB  |
+| speaker2 | medium | 15    | 43.45s   | 4.80s  | 9.05x  | 14.0 MB  |
+| speaker2 | long   | 40    | 82.42s   | 10.00s | 8.24x  | 14.0 MB  |
+
+**Key implications for Phase 3:**
+- Budget ~8–10x RTF for medium/long lines (the realistic conversation range)
+- Short lines (<5 words) are outliers at 14–23x RTF due to fixed model startup overhead
+  — avoid splitting dialogue into tiny fragments in the batch renderer
+- Peak memory per worker (Python-side): ~14MB — 8 parallel workers won't fight over RAM
+- Speaker 2 generates consistently faster than Speaker 1 at equivalent word counts
+- Model load time with cloning: ~8–13s (vs 7.89s Phase 1 baseline) — load once, reuse
+
 Living doc of how the pieces fit together — filled in as modules take shape.
