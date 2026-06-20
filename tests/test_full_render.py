@@ -27,12 +27,12 @@ import config
 from script_parser import parse_script, _estimate_gen_time
 from orchestrator import render_conversation
 
-SEQUENTIAL_ESTIMATE_S = 724.6   # from Day 1 parser output
+SEQUENTIAL_ESTIMATE_S = 724.6  # from Day 1 parser output
 
 
 def main():
     # ── Parse full script ─────────────────────────────────────────────────────
-    chunks      = parse_script()   # uses config defaults: speaker1.txt + speaker2.txt
+    chunks = parse_script()  # uses config defaults: speaker1.txt + speaker2.txt
     total_turns = sum(len(c["turns"]) for c in chunks)
 
     print(f"\nFull script: {len(chunks)} chunk(s), {total_turns} turn(s)")
@@ -40,24 +40,32 @@ def main():
 
     print("Chunk layout:")
     for chunk in chunks:
-        chunk_time = sum(_estimate_gen_time(spk, txt) for spk, txt in chunk["turns"])
-        speakers   = " ".join(spk for spk, _ in chunk["turns"])
-        print(f"  Chunk {chunk['chunk_idx']}: {len(chunk['turns'])} turn(s) "
-              f"[{speakers}]  ~{chunk_time:.1f}s est.")
+        chunk_time = sum(
+            _estimate_gen_time(
+                turn["speaker"], " ".join(sc["text"] for sc in turn["sub_clips"])
+            )
+            for turn in chunk["turns"]
+        )
+        speakers = " ".join(turn["speaker"] for turn in chunk["turns"])
+        print(
+            f"  Chunk {chunk['chunk_idx']}: {len(chunk['turns'])} turn(s) "
+            f"[{speakers}]  ~{chunk_time:.1f}s est."
+        )
 
     print(f"\nStarting render — expect 10–20 min on this hardware ...\n")
 
     # ── Run full pipeline ─────────────────────────────────────────────────────
-    start      = time.time()
+    start = time.time()
     final_path = render_conversation(chunks)
-    elapsed    = time.time() - start
+    elapsed = time.time() - start
 
     speedup = SEQUENTIAL_ESTIMATE_S / elapsed
 
     # ── Measure output duration ───────────────────────────────────────────────
     from pydub import AudioSegment
-    final_audio    = AudioSegment.from_wav(str(final_path))
-    audio_duration = len(final_audio) / 1000.0   # ms → seconds
+
+    final_audio = AudioSegment.from_wav(str(final_path))
+    audio_duration = len(final_audio) / 1000.0  # ms → seconds
 
     # ── Print results ─────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
@@ -73,13 +81,15 @@ def main():
     print(f"{'='*60}\n")
 
     # ── Verify output ─────────────────────────────────────────────────────────
-    assert final_path.exists(),                 "conversation_final.wav not created"
+    assert final_path.exists(), "conversation_final.wav not created"
     assert final_path.stat().st_size > 100_000, "Output file suspiciously small"
-    assert audio_duration > 30.0,               f"Audio too short: {audio_duration:.2f}s"
+    assert audio_duration > 30.0, f"Audio too short: {audio_duration:.2f}s"
 
     print("All assertions passed.")
     print(f"\nListen to: {final_path}")
-    print("Check: natural flow, correct voices, no seam artifacts at chunk boundaries.\n")
+    print(
+        "Check: natural flow, correct voices, no seam artifacts at chunk boundaries.\n"
+    )
 
     # ── Write results to ARCHITECTURE.md ─────────────────────────────────────
     arch_path = config.BASE_DIR / "docs" / "ARCHITECTURE.md"

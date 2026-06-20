@@ -295,3 +295,23 @@ automatically when the full pipeline is re-run end-to-end after Phase 5 — `ren
 already guarantees both are produced from the same result set.
 
 Living doc of how the pieces fit together — filled in as modules take shape.
+
+## Phase 6 Findings
+
+### Day 1 — End-to-End Integration Verified
+
+Fresh render run on the full 16-turn sample script after Phase 5 completion.
+
+| Metric              | Value              |
+|---------------------|--------------------|
+| Total turns         | 16                 |
+| Chunks / Workers    | 7 / 7              |
+| Wall-clock time     | 665.0s (11.1 min)  |
+| Output audio        | 65.43s             |
+| Parallel speedup    | 1.09x              |
+| Caption words       | 187                |
+
+**Sync drift: resolved.** Captions and audio produced in the same `render_conversation()`
+pass track correctly throughout — correct speaker colours, no turn-level offset,
+clean end-of-audio alignment.
+
