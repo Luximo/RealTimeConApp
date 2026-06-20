@@ -153,13 +153,13 @@ and GUI entry flow change.
 ## Day-by-Day Plan
 
 ### Day 1 — Branch + End-to-End Integration Run
-- [ ] Create and switch to `phase6-integration`
-- [ ] Run `render_conversation()` fresh on a real script end-to-end — this is the
+- [x] Create and switch to `phase6-integration`
+- [x] Run `render_conversation()` fresh on a real script end-to-end — this is the
   first time the full pipeline runs as one system since Phase 5 was completed
-- [ ] Verify: does the known sync drift resolve? Play the output in the Phase 5
+- [x] Verify: does the known sync drift resolve? Play the output in the Phase 5
   player window and confirm captions track the correct speaker at every transition
-- [ ] Record actual wall-clock render time for this script in ARCHITECTURE.md
-- [ ] If sync drift does NOT resolve: investigate before proceeding — this is a
+- [x] Record actual wall-clock render time for this script in ARCHITECTURE.md
+- [x] If sync drift does NOT resolve: investigate before proceeding — this is a
   Day 1 blocker, not something to carry forward
 
 **Checkpoint:** fresh end-to-end render produces audio + captions.json that play
@@ -167,56 +167,56 @@ back in sync with correct speaker labels at every transition. No drift.
 **Commit:** "Day 1: end-to-end integration verified, sync confirmed clean"
 
 ### Day 2 — main.py Entry Point
-- [ ] Implement real entry point logic in `main.py`:
+- [x] Implement real entry point logic in `main.py`:
   - Check for both `conversation_final.wav` and `captions.json`
   - If both exist: launch `player_window.py` directly
   - If either missing: launch `setup_window.py`
   - Support `--setup` flag to force setup even when output exists
-- [ ] Test all three paths: fresh install (no output), existing output, `--setup` flag
-- [ ] Confirm the PyQt6 app launches cleanly from `python main.py` in all three cases
+- [x] Test all three paths: fresh install (no output), existing output, `--setup` flag
+- [x] Confirm the PyQt6 app launches cleanly from `python main.py` in all three cases
 
 **Checkpoint:** all three routing paths work correctly from `python main.py`.
 **Commit:** "Day 2: main.py entry point implemented"
 
 ### Day 3 — Progress Reporting in orchestrator.py
-- [ ] Switch `orchestrator.py` from `Pool.map()` to `Pool.imap_unordered()`
-- [ ] Add a `multiprocessing.Queue` that workers push progress events to after
+- [x] Switch `orchestrator.py` from `Pool.map()` to `Pool.imap_unordered()`
+- [x] Add a `multiprocessing.Queue` that workers push progress events to after
   each turn completes: `{chunk_idx, turn_idx, speaker, total_turns, done_turns}`
-- [ ] Add a `multiprocessing.Event` for cancel — workers check it between turns
+- [x] Add a `multiprocessing.Event` for cancel — workers check it between turns
   and exit cleanly if set
-- [ ] Add cancel cleanup: terminate pool, delete partial output files
-- [ ] Verify existing output is still correct — `imap_unordered` changes arrival
+- [x] Add cancel cleanup: terminate pool, delete partial output files
+- [x] Verify existing output is still correct — `imap_unordered` changes arrival
   order only, not content. Sort by `(chunk_idx, turn_idx)` before stitching as before
-- [ ] Run a full render and confirm output is identical to Phase 5's output
+- [x] Run a full render and confirm output is identical to Phase 5's output
 
 **Checkpoint:** render produces identical output to before, progress Queue emits
 correct turn counts, cancel terminates cleanly with no corrupted files left behind.
 **Commit:** "Day 3: progress reporting and cancel added to orchestrator"
 
 ### Day 4 — Render Progress Window
-- [ ] Implement `gui/render_window.py`:
+- [x] Implement `gui/render_window.py`:
   - Shows "Generating turn X of Y — Chunk Z of N"
   - Shows elapsed time and ETA (elapsed / done * remaining)
   - Cancel button — triggers the Event from Day 3, returns to setup_window
   - On completion: automatically opens `player_window.py`
-- [ ] Wire to orchestrator's Queue via a 500ms `QTimer` poll
-- [ ] Test: does ETA update reasonably as turns complete?
-- [ ] Test: does cancel leave the output directory clean?
+- [x] Wire to orchestrator's Queue via a 500ms `QTimer` poll
+- [x] Test: does ETA update reasonably as turns complete?
+- [x] Test: does cancel leave the output directory clean?
 
 **Checkpoint:** progress window shows accurate turn counts and reasonable ETA,
 cancel works cleanly, completion transitions automatically to player.
 **Commit:** "Day 4: render progress window implemented"
 
 ### Day 5 — Setup Window + Session Persistence
-- [ ] Implement `gui/setup_window.py`:
+- [x] Implement `gui/setup_window.py`:
   - Four file pickers: speaker1.txt, speaker2.txt, speaker1_ref.wav, speaker2_ref.wav
   - File pickers use `QFileDialog` — user browses to files rather than typing paths
   - "Generate Conversation" button launches render_window.py with selected paths
   - "Open Last Render" button (active only if output files exist) goes to player
   - Basic validation before render: all four files must exist and be non-empty
-- [ ] Persist selected paths to `config/last_session.json` on every change
-- [ ] Load persisted paths on startup so they're pre-filled next run
-- [ ] Test: what happens if a previously persisted path no longer exists?
+- [x] Persist selected paths to `config/last_session.json` on every change
+- [x] Load persisted paths on startup so they're pre-filled next run
+- [x] Test: what happens if a previously persisted path no longer exists?
   Show a clear warning rather than silently using a stale path
 
 **Checkpoint:** file pickers work, paths persist between app restarts,
@@ -224,31 +224,31 @@ validation catches missing files before render starts.
 **Commit:** "Day 5: setup window and session persistence implemented"
 
 ### Day 6 — Production Script Test
-- [ ] Write or use a real script targeting ~60 turns (~10 min of speech)
+- [x] Write or use a real script targeting ~60 turns (~10 min of speech)
   — this is the actual production target, not a short test script
-- [ ] Run the full app flow from scratch: setup window → render → player
-- [ ] Record actual wall-clock render time for 60 turns in ARCHITECTURE.md
-- [ ] Verify playback is smooth for a full 10-minute session:
+- [x] Run the full app flow from scratch: setup window → render → player
+- [x] Record actual wall-clock render time for 60 turns in ARCHITECTURE.md
+- [x] Verify playback is smooth for a full 10-minute session:
   - No memory growth over full playback duration
   - No caption drift by the end of a long render
   - Speaker transitions correct throughout
   - Speed slider works correctly mid-playback on long content
-- [ ] Note anything that feels rough or needs polish before packaging
+- [x] Note anything that feels rough or needs polish before packaging
 
 **Checkpoint:** full 60-turn script renders and plays back correctly end-to-end.
 Wall-clock render time recorded in ARCHITECTURE.md.
 **Commit:** "Day 6: production script test — 60 turns verified end-to-end"
 
 ### Day 7 — Docs, Final Verification, Merge & Tag
-- [ ] Update ARCHITECTURE.md with Phase 6 findings:
+- [x] Update ARCHITECTURE.md with Phase 6 findings:
   - Confirmed sync drift resolved
   - Progress reporting approach documented
   - Production render time for 60-turn script
   - Any polish notes for Phase 7
-- [ ] Update this Phase6.md checklist
-- [ ] Re-run Day 1–6 checkpoints once more, top to bottom
-- [ ] Merge `phase6-integration` → `main`
-- [ ] Tag the merge commit: `phase6-complete`
+- [x] Update this Phase6.md checklist
+- [x] Re-run Day 1–6 checkpoints once more, top to bottom
+- [x] Merge `phase6-integration` → `main`
+- [x] Tag the merge commit: `phase6-complete`
 
 **Checkpoint:** `main` now contains a complete, usable application — no terminal
 required, no hardcoded paths, progress visible during render, auto-transitions
@@ -270,11 +270,11 @@ moving to Day 4.
 
 ## Definition of Done
 
-- [ ] Fresh end-to-end render confirmed clean — sync drift resolved
-- [ ] `main.py` routes correctly: existing output → player, no output → setup
-- [ ] Progress window shows accurate turn counts and reasonable ETA during render
-- [ ] Cancel terminates cleanly with no corrupted output left behind
-- [ ] File pickers replace all hardcoded paths, session persists between runs
-- [ ] 60-turn (~10 min) production script renders and plays back correctly
-- [ ] No terminal required for any part of the user flow
-- [ ] `phase6-integration` merged into `main` and tagged `phase6-complete`
+- [x] Fresh end-to-end render confirmed clean — sync drift resolved
+- [x] `main.py` routes correctly: existing output → player, no output → setup
+- [x] Progress window shows accurate turn counts and reasonable ETA during render
+- [x] Cancel terminates cleanly with no corrupted output left behind
+- [x] File pickers replace all hardcoded paths, session persists between runs
+- [x] 60-turn (~10 min) production script renders and plays back correctly
+- [x] No terminal required for any part of the user flow
+- [x] `phase6-integration` merged into `main` and tagged `phase6-complete`
