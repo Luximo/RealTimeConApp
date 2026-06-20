@@ -12,6 +12,13 @@ import sys
 _bin_dir = os.path.join(os.path.dirname(sys.executable), "bin")
 os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
 
+# Ensure required runtime directories exist next to the exe
+for _d in [
+    os.path.join(os.path.dirname(sys.executable), "output"),
+    os.path.join(os.path.dirname(sys.executable), "config"),
+]:
+    os.makedirs(_d, exist_ok=True)
+
 import config
 
 
