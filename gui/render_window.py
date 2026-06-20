@@ -36,7 +36,13 @@ class RenderWindow(QMainWindow):
     """
 
     def __init__(
-        self, s1_script=None, s2_script=None, s1_ref=None, s2_ref=None, parent=None
+        self,
+        s1_script=None,
+        s2_script=None,
+        s1_ref=None,
+        s2_ref=None,
+        setup_ref=None,
+        parent=None,
     ):
         super().__init__(parent)
         self.setWindowTitle("RealTimeConApp — Generating ...")
@@ -52,6 +58,7 @@ class RenderWindow(QMainWindow):
         self._turns_done = 0
         self._start_time = None
         self._cancelled = False
+        self._setup_ref = setup_ref
 
         # ── Parse script (uses config defaults if paths not provided) ─────────
         self._chunks = parse_script(s1_path=s1_script, s2_path=s2_script)
@@ -251,6 +258,12 @@ class RenderWindow(QMainWindow):
 
     def _on_render_cancelled(self):
         self._cancelled = True
+        # If launched from SetupWindow, hand control back to it
+        if self._setup_ref:
+            self._setup_ref.show_render_cancelled()
+            self.close()
+            return
+        # Standalone launch — show cancelled state for manual close
         self._heading.setText("Render cancelled.")
         self._heading.setStyleSheet(
             "color:#e94560; font-family:'Segoe UI';"
