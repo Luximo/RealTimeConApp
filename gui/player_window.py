@@ -17,12 +17,25 @@ from PyQt6.QtGui import QPainter, QFont, QFontMetrics, QColor
 import config
 from captions import load_captions
 
+# Speaker colours — used for the fading label on transition
+_SPEAKER_COLORS = {
+    "S1": QColor("#4ecca3"),  # teal  — male
+    "S2": QColor("#f5a623"),  # amber — female
+}
+_SPEAKER_NAMES = {
+    "S1": "Speaker 1",
+    "S2": "Speaker 2",
+}
+
 
 class ScrollingCaptionWidget(QWidget):
     """
     Custom QPainter widget — words enter from the right, scroll left,
     wrap to a new bottom line when the current line fills, older lines
     scroll up and off the top.
+
+    On speaker transition: all words are cleared and a fading speaker
+    label appears at the top of the display for SPEAKER_LABEL_DISPLAY_DURATION.
     """
 
     LEFT_MARGIN = 20  # px — leftmost word reaching here triggers a line wrap
@@ -41,6 +54,14 @@ class ScrollingCaptionWidget(QWidget):
         self._line_h = 0
         self._ready = False
 
+        # Speaker label fade state
+        self._spk_label = ""
+        self._spk_color = QColor("#ffffff")
+        self._spk_ticks = 0  # ticks remaining
+        self._spk_total = 1  # total ticks (avoid divide-by-zero)
+
+    # ── Geometry ──────────────────────────────────────────────────────────────
+
     def _init_geometry(self):
         fm = QFontMetrics(self._font)
         self._line_h = fm.height() + 10
@@ -51,12 +72,13 @@ class ScrollingCaptionWidget(QWidget):
         super().resizeEvent(event)
         self._init_geometry()
 
+    # ── Public API ────────────────────────────────────────────────────────────
+
     def add_word(self, text: str):
         if not self._ready:
             self._init_geometry()
 
         fm = QFontMetrics(self._font)
-        word_w = fm.horizontalAdvance(text)
 
         # Wrap check: if leftmost word on bottom line has hit the left margin, wrap
         bottom_words = [w for w in self._words if abs(w["y"] - self._base_y) < 1]
@@ -66,7 +88,7 @@ class ScrollingCaptionWidget(QWidget):
             self._words = [w for w in self._words if w["y"] > -self._line_h]
             bottom_words = []
 
-        # Entry x: after the rightmost word on the current line, never left of right edge
+        # Entry x: after rightmost word on current line, never left of right edge
         if bottom_words:
             last = max(bottom_words, key=lambda w: w["x"])
             last_w = fm.horizontalAdvance(last["text"])
@@ -79,19 +101,54 @@ class ScrollingCaptionWidget(QWidget):
 
         self._words.append({"text": text, "x": entry_x, "y": float(self._base_y)})
 
+    def show_speaker_label(self, speaker: str):
+        """Flash a fading speaker label at the top of the display."""
+        self._spk_label = _SPEAKER_NAMES.get(speaker, speaker)
+        self._spk_color = _SPEAKER_COLORS.get(speaker, QColor("#ffffff"))
+        total = max(1, int(config.SPEAKER_LABEL_DISPLAY_DURATION * 1000 / 30))
+        self._spk_ticks = total
+        self._spk_total = total
+        self.update()
+
     def tick(self, pixels: float):
+        """Shift every word left by pixels. Called every 30 ms."""
         for w in self._words:
             w["x"] -= pixels
         self._words = [w for w in self._words if w["x"] > -400]
+
+        # Countdown speaker label fade
+        if self._spk_ticks > 0:
+            self._spk_ticks -= 1
+
         self.update()
 
     def clear_words(self):
+        """Remove all words — speaker transition or stop/restart."""
         self._words.clear()
         self.update()
+
+    # ── Paint ─────────────────────────────────────────────────────────────────
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # ── Speaker label (fades out over SPEAKER_LABEL_DISPLAY_DURATION) ────
+        if self._spk_ticks > 0 and self._spk_label:
+            opacity = self._spk_ticks / self._spk_total
+            lbl_color = QColor(self._spk_color)
+            lbl_color.setAlphaF(opacity)
+            painter.setPen(lbl_color)
+            lbl_font = QFont(config.CAPTION_FONT_FAMILY, config.CAPTION_FONT_SIZE - 6)
+            lbl_font.setBold(True)
+            painter.setFont(lbl_font)
+            painter.drawText(
+                self.rect().adjusted(0, 16, 0, 0),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                self._spk_label,
+            )
+
+        # ── Scrolling words ───────────────────────────────────────────────────
         painter.setFont(self._font)
         painter.setPen(QColor("#ffffff"))
         fm = QFontMetrics(self._font)
@@ -100,6 +157,7 @@ class ScrollingCaptionWidget(QWidget):
             if x > self.width() + 50 or x < -400:
                 continue
             painter.drawText(x, int(w["y"]) + fm.ascent(), w["text"])
+
         painter.end()
 
 
@@ -115,6 +173,7 @@ class PlayerWindow(QMainWindow):
         self._captions = []
         self._word_idx = 0
         self._speed_factor = config.DEFAULT_SPEED
+        self._current_speaker = None  # tracks last seen speaker label
         self._build_ui()
         self._setup_player()
         self._setup_caption_timer()
@@ -276,6 +335,8 @@ class PlayerWindow(QMainWindow):
                 and self._captions[self._word_idx]["start"] <= target_s
             ):
                 self._word_idx += 1
+            # Reset speaker tracking so the next word correctly fires a transition
+            self._current_speaker = None
 
     # ── Caption timer tick ────────────────────────────────────────────────────
 
@@ -291,13 +352,24 @@ class PlayerWindow(QMainWindow):
             self._word_idx < len(self._captions)
             and self._captions[self._word_idx]["start"] <= pos_s
         ):
-            self.caption_display.add_word(self._captions[self._word_idx]["word"])
+
+            entry = self._captions[self._word_idx]
+            speaker = entry["speaker"]
+
+            # Speaker transition — clear display and flash label
+            if speaker != self._current_speaker:
+                self.caption_display.clear_words()
+                self.caption_display.show_speaker_label(speaker)
+                self._current_speaker = speaker
+
+            self.caption_display.add_word(entry["word"])
             self._word_idx += 1
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _reset_captions(self):
         self._word_idx = 0
+        self._current_speaker = None
         self.caption_display.clear_words()
 
     # ── Speed slider ─────────────────────────────────────────────────────────
