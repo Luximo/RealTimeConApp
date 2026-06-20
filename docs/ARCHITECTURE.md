@@ -316,21 +316,21 @@ pass track correctly throughout — correct speaker colours, no turn-level offse
 clean end-of-audio alignment.
 
 
-## Parallel Batch Render Timing (Phase 3, Day 5)
+### Day 6 — Production Script Test (44 turns, "The Day After")
 
-Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+Full app flow tested end-to-end: setup window → render window → player.
 
-| Metric              | Value                        |
-|---------------------|------------------------------|
-| Total turns         | 16                            |
-| Chunks              | 7                             |
-| Workers used        | 7                             |
-| Wall-clock time     | 652.1s (10.9 min)         |
-| Sequential estimate | 724.6s                       |
-| Parallel speedup    | 1.11x                         |
-| Output audio length | 65.26s                      |
-| Inter-speaker pause | 0.3s (tuned Day 4)           |
+| Metric              | Value              |
+|---------------------|--------------------|
+| Script              | 44 turns (merged from 60 raw lines, 7 chunks) |
+| Caption words       | 648                |
+| Output audio        | 3:28 (208s)        |
+| Wall-clock render   | ~28 min            |
+| Full flow           | Setup → Render → Player (automatic) |
 
-**Key implication for longer scripts:**
-At 1.11x speedup on a 16-turn script, a 60-turn (~10 min audio)
-conversation would render in roughly 40.8 min wall-clock time.
+Progress window showed accurate turn counts and ETA throughout.
+Render-to-player transition happened automatically on completion.
+Audio sounds natural; captions track correctly at production length.
+
+Note: config/last_session.json should be added to .gitignore before Phase 7
+to avoid committing user-specific paths.
