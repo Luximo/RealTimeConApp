@@ -315,3 +315,22 @@ Fresh render run on the full 16-turn sample script after Phase 5 completion.
 pass track correctly throughout — correct speaker colours, no turn-level offset,
 clean end-of-audio alignment.
 
+
+## Parallel Batch Render Timing (Phase 3, Day 5)
+
+Full pipeline test on the complete sample script (speaker1.txt + speaker2.txt).
+
+| Metric              | Value                        |
+|---------------------|------------------------------|
+| Total turns         | 16                            |
+| Chunks              | 7                             |
+| Workers used        | 7                             |
+| Wall-clock time     | 652.1s (10.9 min)         |
+| Sequential estimate | 724.6s                       |
+| Parallel speedup    | 1.11x                         |
+| Output audio length | 65.26s                      |
+| Inter-speaker pause | 0.3s (tuned Day 4)           |
+
+**Key implication for longer scripts:**
+At 1.11x speedup on a 16-turn script, a 60-turn (~10 min audio)
+conversation would render in roughly 40.8 min wall-clock time.
