@@ -1,6 +1,17 @@
 """Entry point; wires everything together."""
 
+import multiprocessing
+
+multiprocessing.freeze_support()  # MUST be first — before any other logic
+
+import os
 import sys
+
+# Prepend bundled ffmpeg (bin/ffmpeg.exe) to PATH so pydub finds it in the
+# packaged build. In dev mode, bin/ won't exist and system ffmpeg is used instead.
+_bin_dir = os.path.join(os.path.dirname(sys.executable), "bin")
+os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
+
 import config
 
 
