@@ -46,3 +46,14 @@ RTF = {
 }
 
 WORDS_PER_SECOND = 2.5  # rough speech rate used to estimate audio duration per turn
+
+
+# ── Playback & display (Phase 5) ──────────────────────────────────────────────
+MIN_SPEED = 0.5
+MAX_SPEED = 2.0
+DEFAULT_SPEED = 1.0
+
+CAPTION_FONT_FAMILY = "Segoe UI"
+CAPTION_FONT_SIZE = 28  # points
+SCROLL_SPEED_BASE = 250  # pixels per second at 1.0x
+SPEAKER_LABEL_DISPLAY_DURATION = 1.0  # seconds the speaker label shows per transition

@@ -39,3 +39,18 @@ def generate_captions(results: list, output_path=None) -> Path:
         json.dump(caption_data, f, indent=2, ensure_ascii=False)
 
     return output_path
+
+
+def load_captions(path=None) -> list:
+    """
+    Load captions.json from disk and return the list of word entries.
+
+    Args:
+        path: Path to captions.json. Defaults to output/captions.json.
+
+    Returns:
+        List of dicts: [{word, start, end, speaker}, ...]
+    """
+    path = Path(path or (config.OUTPUT_DIR / "captions.json"))
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
