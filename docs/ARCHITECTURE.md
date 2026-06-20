@@ -229,4 +229,69 @@ For turns with no pause markers, `sc_idx` is always `00`. Turns with markers pro
 - All 11 structural checks passed: ascending timestamps, correct word count,
   correct speaker labels, no overlaps, no negatives, start < end for every entry
 
+## Phase 5 Findings
+
+### GUI Stack (confirmed working)
+- **PyQt6 6.11.0** + **PyQt6-Qt6 6.11.1** — installed via `pip install PyQt6`
+- Qt multimedia backend: **FFmpeg 7.1.3** (auto-detected from the ffmpeg 8.1.1
+  install done in Phase 0 — no separate multimedia extras package needed)
+- `QMediaPlayer` + `QAudioOutput` for WAV playback with millisecond position tracking
+- `QTimer` at 30ms interval for the caption animation loop
+- `QPainter` on a custom `QWidget` (`ScrollingCaptionWidget`) for all scrolling text
+- `QMediaPlayer.setPlaybackRate()` confirmed pitch-preserving on Windows at 0.5x–2.0x
+  — no ffmpeg call or external time-stretch library needed
+
+### Caption Sync Approach
+`QMediaPlayer.position()` returns position in **media time** (not wall-clock time),
+so caption timestamp comparisons (`entry["start"] <= pos_s`) work correctly at any
+playback speed without recalculating timestamps. The speed factor only needs to scale
+the scroll pixel rate, not the timestamp comparisons.
+
+### Scrolling Animation Design
+Words enter from the right edge (`x = widget.width() + WORD_SPACING`) when their
+audio timestamp fires. Natural spacing between words comes from the timing gap between
+fires multiplied by scroll speed — no cumulative x-position tracking is needed.
+
+**Key bug found and fixed (Day 4):** Tracking a cumulative `_next_x` that both scrolls
+left and accumulates new word widths causes words to pile up invisibly off the right
+edge when the word-addition rate exceeds the scroll rate. At 3 words/sec × ~94px per
+word = 282 px/sec of content added vs 120 px/sec scroll, `_next_x` grew at +162 px/sec,
+making words appear on screen seconds late. Fix: always place new words at
+`x = width + WORD_SPACING`; natural spacing is created by timing alone.
+
+### Tuned Display Constants (config.py)
+| Constant                      | Value      | Notes                                  |
+|-------------------------------|------------|----------------------------------------|
+| `SCROLL_SPEED_BASE`           | 250 px/s   | Tuned Day 4; feels natural at 1.0x     |
+| `CAPTION_FONT_SIZE`           | 28 pt      | Readable at normal viewing distance    |
+| `CAPTION_FONT_FAMILY`         | Segoe UI   | Native Windows, clean on dark bg       |
+| `SPEAKER_LABEL_DISPLAY_DURATION` | 1.0s    | Fade-out over ~33 ticks at 30ms each   |
+| `LEFT_MARGIN` / `FADE_WIDTH`  | 55 / 60 px | Wrap triggers just inside the fade zone|
+
+### Speaker Visual Identity
+- S1 (male): teal `#4ecca3` — words, label, transition flash
+- S2 (female): amber `#f5a623` — words, label, transition flash
+- Older lines fade in opacity (1.0 → 0.72 → 0.44 → 0.25 per line above bottom)
+- Left-edge gradient: `#1a1a2e` opaque → transparent over 60px — words melt away
+  rather than hard-clipping as they exit
+
+### Line Wrap Logic
+Wrap triggers when the leftmost word on the bottom line reaches `LEFT_MARGIN = 55px`.
+On wrap: all existing words shift up by `line_height`, pruning any that go above the
+widget top. The bottom line resets and the new word enters at the right edge.
+At 250 px/s and ~3 words/sec, a line typically holds 10–12 words before wrapping.
+
+### captions.py — load_captions() added (Phase 5)
+Phase 4 left `captions.py` with only `generate_captions()` (render-time).
+Phase 5 added `load_captions(path=None) -> list` — reads `captions.json` from disk
+and returns the word entry list. `gui/player_window.py` calls this once at startup.
+
+### Known Sync Limitation (carried from Phase 4)
+Captions and audio must be produced in the same pipeline pass. The existing
+`output/captions.json` and `output/conversation_final.wav` were produced in different
+passes during Phase 4 development, causing turn-level drift (audio says one speaker's
+words while captions show the other's, converging toward the end). This will resolve
+automatically when the full pipeline is re-run end-to-end after Phase 5 — `render_conversation()`
+already guarantees both are produced from the same result set.
+
 Living doc of how the pieces fit together — filled in as modules take shape.
