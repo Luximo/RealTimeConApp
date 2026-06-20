@@ -295,3 +295,89 @@ automatically when the full pipeline is re-run end-to-end after Phase 5 — `ren
 already guarantees both are produced from the same result set.
 
 Living doc of how the pieces fit together — filled in as modules take shape.
+
+## Phase 6 Findings
+
+### Day 1 — End-to-End Integration Verified
+
+Fresh render run on the full 16-turn sample script after Phase 5 completion.
+
+| Metric              | Value              |
+|---------------------|--------------------|
+| Total turns         | 16                 |
+| Chunks / Workers    | 7 / 7              |
+| Wall-clock time     | 665.0s (11.1 min)  |
+| Output audio        | 65.43s             |
+| Parallel speedup    | 1.09x              |
+| Caption words       | 187                |
+
+**Sync drift: resolved.** Captions and audio produced in the same `render_conversation()`
+pass track correctly throughout — correct speaker colours, no turn-level offset,
+clean end-of-audio alignment.
+
+
+### Day 6 — Production Script Test (44 turns, "The Day After")
+
+Full app flow tested end-to-end: setup window → render window → player.
+
+| Metric              | Value              |
+|---------------------|--------------------|
+| Script              | 44 turns (merged from 60 raw lines, 7 chunks) |
+| Caption words       | 648                |
+| Output audio        | 3:28 (208s)        |
+| Wall-clock render   | ~28 min            |
+| Full flow           | Setup → Render → Player (automatic) |
+
+Progress window showed accurate turn counts and ETA throughout.
+Render-to-player transition happened automatically on completion.
+Audio sounds natural; captions track correctly at production length.
+
+Note: config/last_session.json should be added to .gitignore before Phase 7
+to avoid committing user-specific paths.
+
+Note: config/last_session.json added to .gitignore — user-specific paths
+should not be committed.
+
+### Phase 6 Architectural Notes
+
+**Orchestrator changes (Day 3):**
+- `Pool.map()` replaced with `Pool.imap_unordered()` — results arrive as each
+  worker finishes a chunk, enabling per-turn progress events
+- `_worker_init` now accepts `(progress_queue, cancel_event)` via `initargs` —
+  the only safe way to share IPC primitives with Windows spawn-mode workers
+- Workers push `{chunk_idx, turn_idx, speaker, text}` to `progress_queue` after
+  each full turn (all sub-clips) completes
+- Workers check `cancel_event` before each turn — raise `InterruptedError` if set
+- `run_parallel()` catches `InterruptedError`, calls `pool.terminate()` via
+  context manager `__exit__`, deletes partial chunk WAV files, returns `[]`
+- `render_conversation()` returns `None` on cancel; GUI checks for this
+
+**IPC primitives:**
+- `multiprocessing.Queue` — workers → `render_window.py` (progress events)
+- `multiprocessing.Event` — `render_window.py` → workers (cancel signal)
+- `queue.SimpleQueue` (stdlib) — render thread → `render_window.py` (sentinel only)
+
+**GUI app flow (Days 2, 4, 5):**
+- `main.py` checks for both output files; routes to player or setup
+- `--setup` flag forces setup window even when output exists
+- `SetupWindow` hides on Generate; creates `RenderWindow(setup_ref=self)`
+- `RenderWindow` runs `render_conversation()` in a daemon `threading.Thread`
+- 500ms `QTimer` drains `_progress_queue` and checks `_result_queue` for sentinel
+- On completion: render thread pushes sentinel → poll detects it → `PlayerWindow`
+  opened, `RenderWindow` closed — fully automatic, no user action needed
+- On cancel: `RenderWindow` calls `setup_ref.show_render_cancelled()` and closes
+
+**Session persistence:**
+- Paths written to `config/last_session.json` on every file picker change
+- On startup: each path validated — stale paths (file deleted) show orange warning,
+  field left empty rather than silently passing a bad path to the pipeline
+- `config/last_session.json` in `.gitignore` — not committed
+
+**Windows-specific notes:**
+- Occasional `OSError: The paging file is too small` on one worker during model
+  loading — Windows virtual memory blip when 7 models load simultaneously. Pool
+  recovers by spawning a replacement worker. Not a code bug; reduce `NUM_WORKERS`
+  in `config.py` if this becomes frequent (try 6 or 5).
+- `PySoundFile failed. Trying audioread instead.` from librosa — benign fallback
+  warning during voice cloning; does not affect output quality. Only becomes a
+  problem if the ref clip path is wrong (wrong file type selected in setup window).

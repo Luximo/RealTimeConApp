@@ -16,3 +16,5 @@ output/
 
 # Editor
 .vscode/
+
+config/last_session.json

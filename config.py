@@ -57,3 +57,7 @@ CAPTION_FONT_FAMILY = "Segoe UI"
 CAPTION_FONT_SIZE = 28  # points
 SCROLL_SPEED_BASE = 250  # pixels per second at 1.0x
 SPEAKER_LABEL_DISPLAY_DURATION = 1.0  # seconds the speaker label shows per transition
+
+# ── Session persistence (Phase 6) ─────────────────────────────────────────────
+CONFIG_DIR = BASE_DIR / "config"
+SESSION_FILE = CONFIG_DIR / "last_session.json"
