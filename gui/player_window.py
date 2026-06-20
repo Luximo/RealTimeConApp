@@ -12,14 +12,22 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import Qt, QUrl, QTimer
+from PyQt6.QtGui import QPainter, QFont, QFontMetrics, QColor
 
 import config
 from captions import load_captions
 
 
-class CaptionDisplay(QWidget):
-    """Caption display area — dark background with a centred word label.
-    Day 4 will replace the label with the full scrolling painter widget."""
+class ScrollingCaptionWidget(QWidget):
+    """
+    Custom QPainter widget — words enter from the right, scroll left,
+    wrap to a new bottom line when the current line fills, older lines
+    scroll up and off the top.
+    """
+
+    LEFT_MARGIN = 20  # px — leftmost word reaching here triggers a line wrap
+    BOTTOM_PADDING = 16  # px — gap between bottom line and widget edge
+    WORD_SPACING = 14  # px — minimum gap between consecutive words
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -27,18 +35,72 @@ class CaptionDisplay(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setStyleSheet("background-color: #1a1a2e;")
 
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._font = QFont(config.CAPTION_FONT_FAMILY, config.CAPTION_FONT_SIZE)
+        self._words = []
+        self._base_y = 0.0
+        self._line_h = 0
+        self._ready = False
 
-        self.word_label = QLabel("")
-        self.word_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.word_label.setStyleSheet(
-            f"color: white;"
-            f" font-size: {config.CAPTION_FONT_SIZE}pt;"
-            f" font-family: '{config.CAPTION_FONT_FAMILY}';"
-            f" background: transparent;"
-        )
-        layout.addWidget(self.word_label)
+    def _init_geometry(self):
+        fm = QFontMetrics(self._font)
+        self._line_h = fm.height() + 10
+        self._base_y = float(self.height() - self._line_h - self.BOTTOM_PADDING)
+        self._ready = True
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._init_geometry()
+
+    def add_word(self, text: str):
+        if not self._ready:
+            self._init_geometry()
+
+        fm = QFontMetrics(self._font)
+        word_w = fm.horizontalAdvance(text)
+
+        # Wrap check: if leftmost word on bottom line has hit the left margin, wrap
+        bottom_words = [w for w in self._words if abs(w["y"] - self._base_y) < 1]
+        if bottom_words and min(w["x"] for w in bottom_words) < self.LEFT_MARGIN:
+            for w in self._words:
+                w["y"] -= self._line_h
+            self._words = [w for w in self._words if w["y"] > -self._line_h]
+            bottom_words = []
+
+        # Entry x: after the rightmost word on the current line, never left of right edge
+        if bottom_words:
+            last = max(bottom_words, key=lambda w: w["x"])
+            last_w = fm.horizontalAdvance(last["text"])
+            entry_x = max(
+                last["x"] + last_w + self.WORD_SPACING,
+                self.width() + self.WORD_SPACING,
+            )
+        else:
+            entry_x = float(self.width() + self.WORD_SPACING)
+
+        self._words.append({"text": text, "x": entry_x, "y": float(self._base_y)})
+
+    def tick(self, pixels: float):
+        for w in self._words:
+            w["x"] -= pixels
+        self._words = [w for w in self._words if w["x"] > -400]
+        self.update()
+
+    def clear_words(self):
+        self._words.clear()
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setFont(self._font)
+        painter.setPen(QColor("#ffffff"))
+        fm = QFontMetrics(self._font)
+        for w in self._words:
+            x = int(w["x"])
+            if x > self.width() + 50 or x < -400:
+                continue
+            painter.drawText(x, int(w["y"]) + fm.ascent(), w["text"])
+        painter.end()
 
 
 class PlayerWindow(QMainWindow):
@@ -52,6 +114,7 @@ class PlayerWindow(QMainWindow):
         self._user_seeking = False
         self._captions = []
         self._word_idx = 0
+        self._speed_factor = config.DEFAULT_SPEED
         self._build_ui()
         self._setup_player()
         self._setup_caption_timer()
@@ -66,7 +129,7 @@ class PlayerWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self.caption_display = CaptionDisplay()
+        self.caption_display = ScrollingCaptionWidget()
         root.addWidget(self.caption_display)
 
         controls = QWidget()
@@ -139,20 +202,17 @@ class PlayerWindow(QMainWindow):
     def _setup_player(self):
         self._audio_output = QAudioOutput()
         self._audio_output.setVolume(1.0)
-
         self._player = QMediaPlayer()
         self._player.setAudioOutput(self._audio_output)
-
         audio_path = config.OUTPUT_DIR / "conversation_final.wav"
         self._player.setSource(QUrl.fromLocalFile(str(audio_path)))
-
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.playbackStateChanged.connect(self._on_state_changed)
 
     def _setup_caption_timer(self):
         self._caption_timer = QTimer()
-        self._caption_timer.setInterval(30)  # ms
+        self._caption_timer.setInterval(30)
         self._caption_timer.timeout.connect(self._on_caption_tick)
 
     def _load_captions(self):
@@ -189,8 +249,7 @@ class PlayerWindow(QMainWindow):
     def _on_position_changed(self, position_ms: int):
         if self._user_seeking or self._duration_ms == 0:
             return
-        slider_val = int(position_ms / self._duration_ms * 1000)
-        self.progress.setValue(slider_val)
+        self.progress.setValue(int(position_ms / self._duration_ms * 1000))
 
     def _on_state_changed(self, state):
         if state == QMediaPlayer.PlaybackState.PlayingState:
@@ -210,7 +269,6 @@ class PlayerWindow(QMainWindow):
         if self._duration_ms > 0:
             target_ms = int(self.progress.value() / 1000 * self._duration_ms)
             self._player.setPosition(target_ms)
-            # Rewind word pointer to match the seek target
             target_s = target_ms / 1000.0
             self._word_idx = 0
             while (
@@ -222,31 +280,29 @@ class PlayerWindow(QMainWindow):
     # ── Caption timer tick ────────────────────────────────────────────────────
 
     def _on_caption_tick(self):
+        pixels = config.SCROLL_SPEED_BASE * self._speed_factor * 0.030
+        self.caption_display.tick(pixels)
+
         if not self._captions:
             return
-        pos_s = self._player.position() / 1000.0
 
-        # Advance past all words whose start time has been reached
+        pos_s = self._player.position() / 1000.0
         while (
             self._word_idx < len(self._captions)
             and self._captions[self._word_idx]["start"] <= pos_s
         ):
+            self.caption_display.add_word(self._captions[self._word_idx]["word"])
             self._word_idx += 1
-
-        # The active word is the last one we passed
-        display_idx = self._word_idx - 1
-        if display_idx >= 0:
-            self.caption_display.word_label.setText(self._captions[display_idx]["word"])
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _reset_captions(self):
         self._word_idx = 0
-        self.caption_display.word_label.setText("")
+        self.caption_display.clear_words()
 
     # ── Speed slider ─────────────────────────────────────────────────────────
 
     def _on_speed_changed(self, value: int):
-        factor = value / 10.0
-        self.speed_value_label.setText(f"{factor:.1f}x")
-        self._player.setPlaybackRate(factor)
+        self._speed_factor = value / 10.0
+        self.speed_value_label.setText(f"{self._speed_factor:.1f}x")
+        self._player.setPlaybackRate(self._speed_factor)

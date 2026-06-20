@@ -55,5 +55,5 @@ DEFAULT_SPEED = 1.0
 
 CAPTION_FONT_FAMILY = "Segoe UI"
 CAPTION_FONT_SIZE = 28  # points
-SCROLL_SPEED_BASE = 120  # pixels per second at 1.0x
+SCROLL_SPEED_BASE = 250  # pixels per second at 1.0x
 SPEAKER_LABEL_DISPLAY_DURATION = 1.0  # seconds the speaker label shows per transition
