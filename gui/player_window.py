@@ -11,20 +11,34 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, QTimer
 
 import config
+from captions import load_captions
 
 
 class CaptionDisplay(QWidget):
-    """Placeholder caption display area — dark background, no text yet.
-    Days 3-4 will replace this with the live scrolling painter widget."""
+    """Caption display area — dark background with a centred word label.
+    Day 4 will replace the label with the full scrolling painter widget."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumHeight(350)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setStyleSheet("background-color: #1a1a2e;")
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.word_label = QLabel("")
+        self.word_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.word_label.setStyleSheet(
+            f"color: white;"
+            f" font-size: {config.CAPTION_FONT_SIZE}pt;"
+            f" font-family: '{config.CAPTION_FONT_FAMILY}';"
+            f" background: transparent;"
+        )
+        layout.addWidget(self.word_label)
 
 
 class PlayerWindow(QMainWindow):
@@ -34,10 +48,14 @@ class PlayerWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("RealTimeConApp")
         self.resize(900, 520)
-        self._duration_ms = 0  # set once durationChanged fires
-        self._user_seeking = False  # True while user drags the progress slider
+        self._duration_ms = 0
+        self._user_seeking = False
+        self._captions = []
+        self._word_idx = 0
         self._build_ui()
         self._setup_player()
+        self._setup_caption_timer()
+        self._load_captions()
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -48,11 +66,9 @@ class PlayerWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Caption display area
         self.caption_display = CaptionDisplay()
         root.addWidget(self.caption_display)
 
-        # Controls bar
         controls = QWidget()
         controls.setStyleSheet("background-color: #16213e;")
         controls.setFixedHeight(70)
@@ -60,7 +76,6 @@ class PlayerWindow(QMainWindow):
         bar.setContentsMargins(12, 8, 12, 8)
         bar.setSpacing(10)
 
-        # Transport buttons
         self.btn_restart = QPushButton("⏮")
         self.btn_play = QPushButton("▶")
         self.btn_stop = QPushButton("⏹")
@@ -75,7 +90,6 @@ class PlayerWindow(QMainWindow):
         bar.addWidget(self.btn_play)
         bar.addWidget(self.btn_stop)
 
-        # Progress scrubber
         self.progress = QSlider(Qt.Orientation.Horizontal)
         self.progress.setRange(0, 1000)
         self.progress.setValue(0)
@@ -88,7 +102,6 @@ class PlayerWindow(QMainWindow):
         )
         bar.addWidget(self.progress, stretch=1)
 
-        # Speed control
         speed_lbl = QLabel("Speed")
         speed_lbl.setStyleSheet("color:#aaaaaa; font-size:12px;")
         bar.addWidget(speed_lbl)
@@ -117,17 +130,13 @@ class PlayerWindow(QMainWindow):
 
         root.addWidget(controls)
 
-        # Wire transport buttons
         self.btn_restart.clicked.connect(self._on_restart)
         self.btn_play.clicked.connect(self._on_play_pause)
         self.btn_stop.clicked.connect(self._on_stop)
-
-        # Wire progress slider seeking
         self.progress.sliderPressed.connect(self._on_seek_start)
         self.progress.sliderReleased.connect(self._on_seek_end)
 
     def _setup_player(self):
-        """Initialise QMediaPlayer and point it at conversation_final.wav."""
         self._audio_output = QAudioOutput()
         self._audio_output.setVolume(1.0)
 
@@ -137,10 +146,22 @@ class PlayerWindow(QMainWindow):
         audio_path = config.OUTPUT_DIR / "conversation_final.wav"
         self._player.setSource(QUrl.fromLocalFile(str(audio_path)))
 
-        # Connect player signals
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.playbackStateChanged.connect(self._on_state_changed)
+
+    def _setup_caption_timer(self):
+        self._caption_timer = QTimer()
+        self._caption_timer.setInterval(30)  # ms
+        self._caption_timer.timeout.connect(self._on_caption_tick)
+
+    def _load_captions(self):
+        try:
+            self._captions = load_captions()
+            print(f"[captions] loaded {len(self._captions)} words")
+        except FileNotFoundError:
+            self._captions = []
+            print("[captions] captions.json not found — captions disabled")
 
     # ── Transport slots ───────────────────────────────────────────────────────
 
@@ -153,30 +174,31 @@ class PlayerWindow(QMainWindow):
     def _on_stop(self):
         self._player.stop()
         self.progress.setValue(0)
+        self._reset_captions()
 
     def _on_restart(self):
+        self._reset_captions()
         self._player.setPosition(0)
         self._player.play()
 
     # ── Player signal handlers ────────────────────────────────────────────────
 
     def _on_duration_changed(self, duration_ms: int):
-        """Called once when media loads and duration becomes known."""
         self._duration_ms = duration_ms
 
     def _on_position_changed(self, position_ms: int):
-        """Called ~every 100ms by QMediaPlayer during playback."""
         if self._user_seeking or self._duration_ms == 0:
             return
         slider_val = int(position_ms / self._duration_ms * 1000)
         self.progress.setValue(slider_val)
 
     def _on_state_changed(self, state):
-        """Flip play/pause button icon to match actual player state."""
         if state == QMediaPlayer.PlaybackState.PlayingState:
             self.btn_play.setText("⏸")
+            self._caption_timer.start()
         else:
             self.btn_play.setText("▶")
+            self._caption_timer.stop()
 
     # ── Progress slider seeking ───────────────────────────────────────────────
 
@@ -188,6 +210,39 @@ class PlayerWindow(QMainWindow):
         if self._duration_ms > 0:
             target_ms = int(self.progress.value() / 1000 * self._duration_ms)
             self._player.setPosition(target_ms)
+            # Rewind word pointer to match the seek target
+            target_s = target_ms / 1000.0
+            self._word_idx = 0
+            while (
+                self._word_idx < len(self._captions)
+                and self._captions[self._word_idx]["start"] <= target_s
+            ):
+                self._word_idx += 1
+
+    # ── Caption timer tick ────────────────────────────────────────────────────
+
+    def _on_caption_tick(self):
+        if not self._captions:
+            return
+        pos_s = self._player.position() / 1000.0
+
+        # Advance past all words whose start time has been reached
+        while (
+            self._word_idx < len(self._captions)
+            and self._captions[self._word_idx]["start"] <= pos_s
+        ):
+            self._word_idx += 1
+
+        # The active word is the last one we passed
+        display_idx = self._word_idx - 1
+        if display_idx >= 0:
+            self.caption_display.word_label.setText(self._captions[display_idx]["word"])
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _reset_captions(self):
+        self._word_idx = 0
+        self.caption_display.word_label.setText("")
 
     # ── Speed slider ─────────────────────────────────────────────────────────
 
