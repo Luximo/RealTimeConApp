@@ -1,9 +1,16 @@
 """Paths, constants, default settings (speed, pause length, etc.)."""
 
+import sys
 from pathlib import Path
 
 # ── Directories ───────────────────────────────────────────────────────────────
-BASE_DIR = Path(__file__).parent
+# In a packaged .exe, resolve paths relative to the exe's folder.
+# In development, resolve relative to this file's folder (the project root).
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).parent
+else:
+    BASE_DIR = Path(__file__).parent
+
 SCRIPTS_DIR = BASE_DIR / "scripts"
 OUTPUT_DIR = BASE_DIR / "output"
 
