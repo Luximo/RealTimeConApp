@@ -1,15 +1,26 @@
 """Entry point; wires everything together."""
 
 import multiprocessing
-
-multiprocessing.freeze_support()  # MUST be first — before any other logic
-
 import os
 import sys
 
+# Suppress console windows for all child processes (ffmpeg, workers) in frozen build.
+# Must happen BEFORE freeze_support() so it applies inside worker processes too.
+if getattr(sys, "frozen", False) and sys.platform == "win32":
+    import subprocess as _sp
+
+    _orig_Popen = _sp.Popen
+
+    def _silent_Popen(*args, **kwargs):
+        if "creationflags" not in kwargs:
+            kwargs["creationflags"] = _sp.CREATE_NO_WINDOW
+        return _orig_Popen(*args, **kwargs)
+
+    _sp.Popen = _silent_Popen
+
+multiprocessing.freeze_support()  # MUST be before any other logic
+
 # Prepend bundled ffmpeg to PATH so pydub finds it in the packaged build.
-# In a frozen build, binaries land in _internal/ (sys._MEIPASS).
-# In dev mode, fall back to a bin/ folder next to the project root.
 if getattr(sys, "frozen", False):
     _bin_dir = os.path.join(sys._MEIPASS, "bin")
 else:
