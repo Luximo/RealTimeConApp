@@ -24,7 +24,10 @@ for pkg in [
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=qt_binaries,
+    binaries=[
+        *qt_binaries,
+        ('bin/ffmpeg.exe', 'bin'),
+    ],
     datas=[
         *qt_datas,
         *perth_datas,

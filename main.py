@@ -7,9 +7,13 @@ multiprocessing.freeze_support()  # MUST be first — before any other logic
 import os
 import sys
 
-# Prepend bundled ffmpeg (bin/ffmpeg.exe) to PATH so pydub finds it in the
-# packaged build. In dev mode, bin/ won't exist and system ffmpeg is used instead.
-_bin_dir = os.path.join(os.path.dirname(sys.executable), "bin")
+# Prepend bundled ffmpeg to PATH so pydub finds it in the packaged build.
+# In a frozen build, binaries land in _internal/ (sys._MEIPASS).
+# In dev mode, fall back to a bin/ folder next to the project root.
+if getattr(sys, "frozen", False):
+    _bin_dir = os.path.join(sys._MEIPASS, "bin")
+else:
+    _bin_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin")
 os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
 
 # Ensure required runtime directories exist next to the exe
