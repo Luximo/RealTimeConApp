@@ -22,3 +22,5 @@ build/
 dist/
 
 scripts/*.wav
+
+bin/
