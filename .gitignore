@@ -20,3 +20,5 @@ output/
 config/last_session.json
 build/
 dist/
+
+scripts/*.wav
