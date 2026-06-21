@@ -18,3 +18,5 @@ output/
 .vscode/
 
 config/last_session.json
+build/
+dist/
