@@ -381,3 +381,95 @@ should not be committed.
 - `PySoundFile failed. Trying audioread instead.` from librosa — benign fallback
   warning during voice cloning; does not affect output quality. Only becomes a
   problem if the ref clip path is wrong (wrong file type selected in setup window).
+
+## Phase 7 Findings
+
+### Packaging Stack
+- **PyInstaller 6.21.0** — single-folder output (`dist/RealTimeConApp/`)
+- **Python 3.11.9** frozen into `_internal/` alongside all dependencies
+- Final distribution folder size: **0.91 GB** (after exclusions)
+- Distribution zip size: **~381 MB** (compressed)
+
+### Four Key Fixes Required for Frozen Build
+
+**1. `multiprocessing.freeze_support()`** — must be the absolute first call in
+`main.py` before any other logic. Without it, worker processes re-run the full
+app on spawn, causing infinite recursive process creation.
+
+**2. Perth checkpoint data files** — Chatterbox bundles Perth (watermarking model)
+checkpoint files as package data inside the `perth` Python package directory.
+PyInstaller bundles Python code but not binary data files by default. Fix:
+`collect_data_files('perth')` and `collect_data_files('chatterbox')` in the spec.
+Symptom without fix: `AssertionError` in `checkpoint_manager.py` on every worker.
+
+**3. `subprocess.Popen` monkey-patch** — must be applied BEFORE `freeze_support()`
+so it takes effect inside worker processes too. Workers in a frozen build spawn as
+new exe instances; `freeze_support()` runs the worker function and exits before
+any later code runs. Placing the patch first ensures ffmpeg calls and worker
+process spawns don't flash console windows.
+```python
+if getattr(sys, "frozen", False) and sys.platform == "win32":
+    import subprocess as _sp
+    _orig_Popen = _sp.Popen
+    def _silent_Popen(*args, **kwargs):
+        if "creationflags" not in kwargs:
+            kwargs["creationflags"] = _sp.CREATE_NO_WINDOW
+        return _orig_Popen(*args, **kwargs)
+    _sp.Popen = _silent_Popen
+```
+
+**4. `sys._MEIPASS` for bundled binary paths** — PyInstaller's `binaries` entries
+land in `_internal/` (accessible via `sys._MEIPASS`), not next to the `.exe`.
+`sys.executable` parent is the correct base for user-facing folders (`output/`,
+`config/`, `scripts/`). `sys._MEIPASS` is correct for bundled binaries (ffmpeg).
+
+### Path Resolution in Frozen Build
+```
+sys.executable parent  →  user-facing folders: output/, config/, scripts/
+sys._MEIPASS           →  bundled binaries: _internal/bin/ffmpeg.exe
+~/.cache/huggingface/  →  model weights (not bundled — downloaded on first run)
+```
+`config.py` uses `getattr(sys, 'frozen', False)` to switch `BASE_DIR` between
+`sys.executable` parent (frozen) and `Path(__file__).parent` (dev).
+
+### Size Optimization
+Baseline (no excludes): **1.09 GB**
+After excluding gradio/fastapi/starlette/uvicorn/pandas/sklearn/numba/llvmlite: **0.91 GB**
+Saving: ~180 MB. Full app flow verified working after all exclusions.
+
+Packages that could NOT be excluded (silently needed by the stack):
+- `anyio` — needed by huggingface_hub async internals
+- `httpx` / `httpcore` — needed by huggingface_hub download
+
+### Runtime Metadata
+Several packages use `pkg_resources.get_distribution()` at runtime to check their
+own version. PyInstaller bundles the code but not the dist-info metadata folders.
+Fix: `copy_metadata(pkg)` in the spec for each affected package. Symptom without
+fix: `PackageNotFoundError: No package metadata was found for 'requests'`.
+
+### First-Run Model Download
+- Cache detection: `~/.cache/huggingface/hub/models--ResembleAI--chatterbox/snapshots/`
+- Download runs `ChatterboxTTS.from_pretrained(device="cpu")` in a background thread
+- HuggingFace Hub doesn't expose download progress callbacks — indeterminate spinner used
+- On failure: error message shown, Retry button re-enabled
+
+### Clean Environment Test (Day 6)
+Tested on single-account machine with PATH isolation (ffmpeg removed from PATH).
+App launched correctly from both `dist\RealTimeConApp\` and extracted zip location.
+Session JSON correctly absent on first extracted-zip launch.
+Note: a second user account or separate machine would be ideal for full isolation,
+but was not available on this hardware.
+
+### Distribution Structure
+```
+RealTimeConApp/
+├── RealTimeConApp.exe          # launcher (~78 MB with bootloader)
+├── _internal/                  # 144 items: Python + all packages
+│   └── bin/
+│       └── ffmpeg.exe          # bundled ffmpeg 8.1.1 (101 MB)
+├── scripts/                    # user places .txt and .wav files here
+├── output/                     # auto-created on first launch
+├── config/                     # auto-created on first launch
+└── README.txt                  # end-user instructions
+```
+
