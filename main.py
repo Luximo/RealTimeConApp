@@ -44,6 +44,19 @@ def output_files_exist() -> bool:
     ).exists()
 
 
+def _chatterbox_cached() -> bool:
+    """Return True if Chatterbox model weights are already in HuggingFace cache."""
+    import os
+    from pathlib import Path
+
+    snapshots = (
+        Path(os.path.expanduser("~/.cache/huggingface/hub"))
+        / "models--ResembleAI--chatterbox"
+        / "snapshots"
+    )
+    return snapshots.exists() and any(snapshots.iterdir())
+
+
 def main():
     from PyQt6.QtWidgets import QApplication
 
@@ -51,16 +64,25 @@ def main():
 
     force_setup = "--setup" in sys.argv
 
-    if not force_setup and output_files_exist():
-        from gui.player_window import PlayerWindow
+    def launch_app():
+        if not force_setup and output_files_exist():
+            from gui.player_window import PlayerWindow
 
-        window = PlayerWindow()
+            window = PlayerWindow()
+        else:
+            from gui.setup_window import SetupWindow
+
+            window = SetupWindow()
+        window.show()
+
+    if not _chatterbox_cached():
+        from gui.first_run_window import FirstRunWindow
+
+        window = FirstRunWindow(on_complete=launch_app)
+        window.show()
     else:
-        from gui.setup_window import SetupWindow
+        launch_app()
 
-        window = SetupWindow()
-
-    window.show()
     sys.exit(app.exec())
 
 
