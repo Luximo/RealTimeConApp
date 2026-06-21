@@ -156,21 +156,21 @@ remove it from the list and investigate before re-adding.
 ## Day-by-Day Plan
 
 ### Day 1 — Branch + freeze_support + First Build Attempt
-- [ ] Create and switch to `phase7-packaging`
-- [ ] Add `multiprocessing.freeze_support()` as the very first call in `main.py`
-- [ ] Add ffmpeg PATH prepend in `main.py` (works transparently in dev mode too)
-- [ ] Install PyInstaller into the venv: `pip install pyinstaller`
-- [ ] Run a naive first build: `pyinstaller --windowed --name RealTimeConApp main.py`
-- [ ] Try to launch the resulting `.exe` — what breaks? Document every error.
-- [ ] Specifically verify: does the app start without recursively spawning? If yes,
+- [x] Create and switch to `phase7-packaging`
+- [x] Add `multiprocessing.freeze_support()` as the very first call in `main.py`
+- [x] Add ffmpeg PATH prepend in `main.py` (works transparently in dev mode too)
+- [x] Install PyInstaller into the venv: `pip install pyinstaller`
+- [x] Run a naive first build: `pyinstaller --windowed --name RealTimeConApp main.py`
+- [x] Try to launch the resulting `.exe` — what breaks? Document every error.
+- [x] Specifically verify: does the app start without recursively spawning? If yes,
   `freeze_support()` is working correctly.
 
 **Checkpoint:** app launches from `.exe` without recursive spawning or immediate crash.
 **Commit:** "Day 1: freeze_support added, first PyInstaller build attempted"
 
 ### Day 2 — .spec File: Hidden Imports + PyQt6 Plugins
-- [ ] Generate a `.spec` file: `pyi-makespec --windowed --name RealTimeConApp main.py`
-- [ ] Add hidden imports the naive build missed — common ones for this stack:
+- [x] Generate a `.spec` file: `pyi-makespec --windowed --name RealTimeConApp main.py`
+- [x] Add hidden imports the naive build missed — common ones for this stack:
   ```python
   hiddenimports=[
       'chatterbox.tts',
@@ -182,50 +182,50 @@ remove it from the list and investigate before re-adding.
       'soundfile',
   ]
   ```
-- [ ] Add PyQt6 Qt plugins collection — without this, multimedia playback breaks:
+- [x] Add PyQt6 Qt plugins collection — without this, multimedia playback breaks:
   ```python
   from PyInstaller.utils.hooks import collect_all
   datas, binaries, hiddenimports = collect_all('PyQt6')
   ```
-- [ ] Rebuild and re-test: does audio play? Do captions load? Does the render run?
-- [ ] Document which hidden imports were actually needed vs which were unnecessary
+- [x] Rebuild and re-test: does audio play? Do captions load? Does the render run?
+- [x] Document which hidden imports were actually needed vs which were unnecessary
 
 **Checkpoint:** full app flow works in packaged build — setup, render, playback.
 **Commit:** "Day 2: .spec file tuned, hidden imports and PyQt6 plugins resolved"
 
 ### Day 3 — ffmpeg Binary + Bundling
-- [ ] Download `ffmpeg.exe` from https://www.gyan.dev/ffmpeg/builds/
+- [x] Download `ffmpeg.exe` from https://www.gyan.dev/ffmpeg/builds/
   (ffmpeg-release-essentials build, just the .exe, not the full GPL suite)
-- [ ] Place `ffmpeg.exe` in `bin/ffmpeg.exe` inside the project
-- [ ] Add `bin/ffmpeg.exe` to the `.spec` file's `binaries` list:
+- [x] Place `ffmpeg.exe` in `bin/ffmpeg.exe` inside the project
+- [x] Add `bin/ffmpeg.exe` to the `.spec` file's `binaries` list:
   ```python
   binaries=[('bin/ffmpeg.exe', 'bin')]
   ```
-- [ ] Temporarily rename the system ffmpeg or test in a clean environment to confirm
+- [x] Temporarily rename the system ffmpeg or test in a clean environment to confirm
   the bundled binary is what the app actually uses during the packaged run
-- [ ] Verify audio stitching and playback still work with the bundled binary
+- [x] Verify audio stitching and playback still work with the bundled binary
 
 **Checkpoint:** app works with bundled ffmpeg.exe, not dependent on system PATH.
 **Commit:** "Day 3: ffmpeg binary bundled and verified"
 
 ### Day 4 — Size Optimization
-- [ ] Measure baseline folder size from Day 2's build
-- [ ] Add excludes to `.spec` file (gradio stack + other unused packages listed above)
-- [ ] Rebuild and measure new folder size
-- [ ] Run full app flow again — confirm nothing is silently broken by the excludes
-- [ ] If app crashes after an exclude: remove that package from the excludes list,
+- [x] Measure baseline folder size from Day 2's build
+- [x] Add excludes to `.spec` file (gradio stack + other unused packages listed above)
+- [x] Rebuild and measure new folder size
+- [x] Run full app flow again — confirm nothing is silently broken by the excludes
+- [x] If app crashes after an exclude: remove that package from the excludes list,
   rebuild, and note which exclude caused the issue in ARCHITECTURE.md
-- [ ] Record before/after sizes in ARCHITECTURE.md
+- [x] Record before/after sizes in ARCHITECTURE.md
 
 **Checkpoint:** folder size reduced, full app flow still works after exclusions.
 **Commit:** "Day 4: unused dependencies excluded, size optimized"
 
 ### Day 5 — First-Run Model Download Screen
-- [ ] Implement model cache detection in `main.py`:
+- [x] Implement model cache detection in `main.py`:
   - Check if HuggingFace cache for chatterbox exists and is non-empty
   - If present: proceed normally to setup or player as before
   - If missing: launch `gui/first_run_window.py` before anything else
-- [ ] Implement `gui/first_run_window.py`:
+- [x] Implement `gui/first_run_window.py`:
   - Clear message: what's being downloaded, approximate size, internet required
   - "Download Now" button — runs `ChatterboxTTS.from_pretrained()` in a
     background thread (same pattern as render_window.py's render thread)
@@ -233,27 +233,27 @@ remove it from the list and investigate before re-adding.
     download progress callbacks, so a spinner is honest)
   - On completion: close first_run_window, proceed to normal app flow
   - On failure (no internet): clear error message with retry button
-- [ ] Add `gui/first_run_window.py` to PyInstaller build, rebuild
+- [x] Add `gui/first_run_window.py` to PyInstaller build, rebuild
 
 **Checkpoint:** on a fresh machine (or with cache cleared), first-run screen appears,
 download completes, app proceeds to normal flow automatically.
 **Commit:** "Day 5: first-run model download screen implemented"
 
 ### Day 6 — Clean Machine Test
-- [ ] Copy the packaged distribution folder to a different user account on this
+- [x] Copy the packaged distribution folder to a different user account on this
   machine, or a machine without Python/venv — the goal is a genuinely clean test,
   not running from the same environment that built the package
-- [ ] Delete or rename the HuggingFace cache to simulate a first launch
-- [ ] Run the full flow from scratch: first-run download → setup → render → player
-- [ ] Verify every part works without the venv, without Python on PATH,
+- [x] Delete or rename the HuggingFace cache to simulate a first launch
+- [x] Run the full flow from scratch: first-run download → setup → render → player
+- [x] Verify every part works without the venv, without Python on PATH,
   without system ffmpeg, without any development environment present
-- [ ] Note any issues discovered and fix them before Day 7
+- [x] Note any issues discovered and fix them before Day 7
 
 **Checkpoint:** full app flow verified on a clean environment with no dev dependencies.
 **Commit:** "Day 6: clean machine test passed"
 
 ### Day 7 — README + Distribution Polish
-- [ ] Write `README.txt` for the distribution folder — one page, plain English:
+- [x] Write `README.txt` for the distribution folder — one page, plain English:
   - What the app does (one sentence)
   - Where to put your script files (`scripts/speaker1.txt`, `scripts/speaker2.txt`)
   - Where to put your voice reference clips (`scripts/speaker1_ref.wav`, etc.)
@@ -261,22 +261,22 @@ download completes, app proceeds to normal flow automatically.
   - How to start a new conversation after rendering one (use the --setup flag,
     or delete the `output/` folder)
   - Known limitation: render takes ~28 min for a 10-minute conversation on CPU
-- [ ] Zip the distribution folder
-- [ ] Verify the zip extracts cleanly and the app runs from the extracted location
+- [x] Zip the distribution folder
+- [x] Verify the zip extracts cleanly and the app runs from the extracted location
 
 **Checkpoint:** distributable zip exists, extracts cleanly, app runs from extracted path.
 **Commit:** "Day 7: README and distribution zip ready"
 
 ### Day 8 — Docs, Final Verification, Merge & Tag
-- [ ] Update ARCHITECTURE.md with Phase 7 findings:
+- [x] Update ARCHITECTURE.md with Phase 7 findings:
   - Final distribution folder size
   - Packages successfully excluded and any that couldn't be excluded
   - freeze_support() behavior confirmed in packaged build
   - First-run download behavior on clean machine
-- [ ] Update this Phase7.md checklist
-- [ ] Re-run Day 1–7 checkpoints once more, top to bottom
-- [ ] Merge `phase7-packaging` → `main`
-- [ ] Tag the merge commit: `phase7-complete`
+- [x] Update this Phase7.md checklist
+- [x] Re-run Day 1–7 checkpoints once more, top to bottom
+- [x] Merge `phase7-packaging` → `main`
+- [x] Tag the merge commit: `phase7-complete`
 
 **Checkpoint:** `main` contains the complete, packaged, distributable application.
 
@@ -298,11 +298,11 @@ If `from_pretrained()` fails in the packaged build but works in dev, check
 
 ## Definition of Done
 
-- [ ] `multiprocessing.freeze_support()` confirmed working in packaged build
-- [ ] Full app flow (setup → render → player) works from the `.exe`
-- [ ] ffmpeg.exe bundled — app not dependent on system PATH
-- [ ] Unused dependencies excluded, folder size documented
-- [ ] First-run model download screen works on a clean machine
-- [ ] Distribution zip verified to extract and run cleanly
-- [ ] README.txt written for end users
-- [ ] `phase7-packaging` merged into `main` and tagged `phase7-complete`
+- [x] `multiprocessing.freeze_support()` confirmed working in packaged build
+- [x] Full app flow (setup → render → player) works from the `.exe`
+- [x] ffmpeg.exe bundled — app not dependent on system PATH
+- [x] Unused dependencies excluded, folder size documented
+- [x] First-run model download screen works on a clean machine
+- [x] Distribution zip verified to extract and run cleanly
+- [x] README.txt written for end users
+- [x] `phase7-packaging` merged into `main` and tagged `phase7-complete`
