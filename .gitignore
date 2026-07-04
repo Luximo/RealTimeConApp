@@ -24,3 +24,5 @@ dist/
 scripts/*.wav
 
 bin/
+
+scripts/chats/
